@@ -1,22 +1,22 @@
-import { CORE_CONCEPTS } from './data';
-import Header from './components/Header/Header.jsx';
-import CoreConcept from './components/CoreConcepts.jsx'
+import Navigation from './layout/Navigation.jsx';
+import Hero from './sections/Hero.jsx';
+import FeatureShowcase from './sections/FeatureShowcase.jsx';
+import AutomationSuite from './sections/AutomationSuite.jsx';
+import MonetizationSpotlight from './sections/MonetizationSpotlight.jsx';
+import CommunityPulse from './sections/CommunityPulse.jsx';
+import CallToAction from './sections/CallToAction.jsx';
 
 function App() {
   return (
-    <div>
-      <Header />
+    <div className="site-shell">
+      <Navigation />
       <main>
-        <section id="core-concepts">
-          <h2>Core Concepts</h2>
-          <ul>
-            <CoreConcept {...CORE_CONCEPTS[0]}/>
-            <CoreConcept {...CORE_CONCEPTS[1]}/>
-            <CoreConcept {...CORE_CONCEPTS[2]}/>
-            <CoreConcept {...CORE_CONCEPTS[3]}/>
-          </ul>
-        </section>
-        <h2>Time to get started!</h2>
+        <Hero />
+        <FeatureShowcase />
+        <AutomationSuite />
+        <MonetizationSpotlight />
+        <CommunityPulse />
+        <CallToAction />
       </main>
     </div>
   );
