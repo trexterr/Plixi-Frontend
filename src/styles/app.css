@@ -51,15 +51,20 @@
 }
 
 .brand-mark .glyph {
-  width: 40px;
-  height: 40px;
-  border-radius: 14px;
-  background: linear-gradient(120deg, var(--accent-2), var(--accent));
-  display: grid;
-  place-items: center;
-  font-weight: 700;
-  color: #010308;
-  margin-right: 0.2rem;
+  width: 46px;
+  height: 46px;
+  border-radius: 50%;
+  border: none;
+  margin-right: 0.35rem;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.brand-mark .glyph img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
 }
 
 .top-nav-links {
@@ -144,6 +149,19 @@
   border-radius: 32px;
   padding: 3rem;
   box-shadow: var(--shadow);
+}
+
+.hero-with-image {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 2rem;
+  background-size: cover;
+  background-position: center;
+  position: relative;
+  overflow: hidden;
+  min-height: 500px;
 }
 
 .marketing-hero h1 {

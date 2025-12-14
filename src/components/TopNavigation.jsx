@@ -1,6 +1,7 @@
 import { NavLink, Link } from 'react-router-dom';
 import { TOP_NAV_LINKS } from '../data';
 import { useSelectedGuild } from '../context/SelectedGuildContext';
+import plixiLogo from '../assets/PLIXI_OFFICIAL_PFP.png';
 
 export default function TopNavigation() {
   const { user, selectedGuild } = useSelectedGuild();
@@ -8,7 +9,9 @@ export default function TopNavigation() {
   return (
     <header className="top-nav">
       <Link to="/" className="brand-mark">
-        <div className="glyph">PX</div>
+        <div className="glyph">
+          <img src={plixiLogo} alt="Plixi logo" />
+        </div>
         <div className="brand-copy">
           <strong>PLIXI</strong>
         </div>
