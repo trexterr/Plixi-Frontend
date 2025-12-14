@@ -1,6 +1,5 @@
 export const TOP_NAV_LINKS = [
   { label: 'Dashboard', to: '/app', end: true },
-  { label: 'Premium', to: '/pricing', end: true },
   { label: 'Docs', to: '/docs', end: true },
 ];
 
@@ -164,6 +163,18 @@ export const FEATURE_MODULES = [
     modes: ['curated', 'open', 'seasonal'],
   },
   {
+    key: 'serverwideStore',
+    title: 'Serverwide Store',
+    description: 'Curate server-operated storefronts with limited drops and global inventory controls.',
+    icon: '🏪',
+    category: 'core',
+    premium: false,
+    route: '/app/marketplace',
+    pill: 'Commerce',
+    defaultEnabled: true,
+    modes: ['standard', 'limited', 'event'],
+  },
+  {
     key: 'mysteryBoxes',
     title: 'Mystery Boxes',
     description: 'Create fully custom mystery boxes with rewards, rarities, and exciting randomized openings.',
@@ -284,12 +295,22 @@ export const MOCK_GUILDS = [
 export const DEFAULT_SETTINGS = {
   economy: {
     economyEnabled: true,
-    startingBalance: 250,
-    dailyCooldown: 6,
-    workReward: 180,
-    taxRate: 5,
     currencyName: 'Credits',
-    previewMode: 'balanced',
+    startingBalance: 250,
+    decimalsEnabled: false,
+    dailyRewardsEnabled: true,
+    dailyBaseAmount: 200,
+    dailyRoleRewards: [
+      { id: 'role-vip', role: '@VIP', amount: 350 },
+      { id: 'role-booster', role: '@Booster', amount: 500 },
+    ],
+    dailyCooldownHours: 24,
+    streaksEnabled: true,
+    streakBonusMultiplier: 1.25,
+    workEnabled: true,
+    workCooldownMinutes: 45,
+    workPayMin: 120,
+    workPayMax: 320,
   },
   jobs: {
     jobsEnabled: true,
