@@ -4,6 +4,7 @@ import SectionHeader from '../../components/SectionHeader';
 import ToggleSwitch from '../../components/ToggleSwitch';
 import ModuleCard from '../../components/ModuleCard';
 import useGuildSettings from '../../hooks/useGuildSettings';
+import { useToast } from '../../components/ToastProvider';
 
 const ANIMATION_BACKGROUNDS = [
   { key: 'still', label: 'Still artwork' },
@@ -17,24 +18,148 @@ const ANIMATION_SPEEDS = [
   { key: 'fast', label: 'Fast' },
 ];
 
+const createId = (prefix) => `${prefix}-${Math.random().toString(36).slice(2, 9)}`;
+
+const coerceNumber = (value, fallback = 0) => {
+  if (value === '' || value === null || typeof value === 'undefined') return fallback;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
+};
+
+const deepClone = (value) => JSON.parse(JSON.stringify(value ?? {}));
+
+const normalizeItem = (item = {}) => ({
+  id: item.id ?? createId('box-item'),
+  name: item.name ?? 'Mystery drop',
+  odds: typeof item.odds === 'number' ? item.odds : 0,
+  quantity: typeof item.quantity === 'number' ? item.quantity : 1,
+  rarity: item.rarity ?? 'Common',
+});
+
+const normalizeBox = (box = {}) => ({
+  id: box.id ?? createId('box'),
+  name: box.name ?? 'New box',
+  color: box.color ?? '#7c3aed',
+  price: typeof box.price === 'number' ? box.price : 0,
+  forSale: typeof box.forSale === 'boolean' ? box.forSale : true,
+  items: Array.isArray(box.items) ? box.items.map(normalizeItem) : [],
+});
+
+const normalizeBehavior = (behavior = {}) => ({
+  animationBackground: behavior.animationBackground ?? 'still',
+  animationSpeed: behavior.animationSpeed ?? 'standard',
+  announceRare: Boolean(behavior.announceRare),
+  announceChannel: behavior.announceChannel ?? '',
+  logOpenings: Boolean(behavior.logOpenings),
+  stockLimited: Boolean(behavior.stockLimited),
+  forSaleOverride: Boolean(behavior.forSaleOverride),
+});
+
+const buildBoxesDraft = (source = {}) => ({
+  enabled: Boolean(source.enabled),
+  behavior: normalizeBehavior(source.behavior ?? {}),
+  collection: Array.isArray(source.collection) ? source.collection.map(normalizeBox) : [],
+});
+
+const normalizeBoxBattles = (battle = {}) => ({
+  enabled: Boolean(battle.enabled),
+});
+
+const serializeBoxes = (draft) => ({
+  enabled: Boolean(draft.enabled),
+  behavior: { ...draft.behavior },
+  collection: draft.collection.map((box) => ({
+    id: box.id,
+    name: box.name,
+    color: box.color,
+    price: coerceNumber(box.price, 0),
+    forSale: Boolean(box.forSale),
+    items: box.items.map((item) => ({
+      id: item.id,
+      name: item.name,
+      odds: coerceNumber(item.odds, 0),
+      quantity: coerceNumber(item.quantity, 0),
+      rarity: item.rarity,
+    })),
+  })),
+});
+
+const serializeBoxBattles = (draft) => ({
+  enabled: Boolean(draft.enabled),
+});
+
+const ODDS_EPSILON = 0.001;
+
+const getOddsIssue = (box) => {
+  const items = Array.isArray(box.items) ? box.items : [];
+  if (!items.length) return 'Add at least one reward to every box';
+
+  let total = 0;
+  for (const item of items) {
+    const odds = coerceNumber(item.odds, 0);
+    if (odds > 100) return 'Individual odds cannot exceed 100%';
+    total += odds;
+  }
+
+  if (total - 100 > ODDS_EPSILON) return 'Odds exceed 100%';
+  if (100 - total > ODDS_EPSILON) return 'Odds must total 100%';
+  return null;
+};
+
 export default function GuildBoxesPage() {
-  const { guild, updateGuild, saveGuild, selectedGuild, lastSaved } = useGuildSettings();
   const location = useLocation();
-  const [selectedBoxId, setSelectedBoxId] = useState(guild.boxes.collection[0]?.id ?? null);
-  const [guildSnapshot, setGuildSnapshot] = useState(() => JSON.stringify(guild));
+  const { guild, updateGuild, saveGuild, selectedGuild, lastSaved } = useGuildSettings();
+  const { showToast } = useToast();
+
+  const guildBoxes = useMemo(() => buildBoxesDraft(guild.boxes ?? {}), [guild.boxes]);
+  const guildBoxBattles = useMemo(() => normalizeBoxBattles(guild.boxBattles ?? {}), [guild.boxBattles]);
+
+  const [boxesDraft, setBoxesDraft] = useState(() => deepClone(guildBoxes));
+  const [boxBattlesDraft, setBoxBattlesDraft] = useState(() => ({ ...guildBoxBattles }));
+  const [selectedBoxId, setSelectedBoxId] = useState(() => guildBoxes.collection[0]?.id ?? null);
   const [editingBoxId, setEditingBoxId] = useState(null);
-  const [editorSnapshot, setEditorSnapshot] = useState(null);
-  const [editorError, setEditorError] = useState('');
-  const lastLocationKeyRef = useRef(location.key);
-  const guildSnapshotRef = useRef(guildSnapshot);
-  const hasGuildChangesRef = useRef(false);
-  const editingBoxIdRef = useRef(editingBoxId);
+
+  useEffect(() => {
+    setBoxesDraft(deepClone(guildBoxes));
+  }, [guildBoxes]);
+
+  useEffect(() => {
+    setBoxBattlesDraft({ ...guildBoxBattles });
+  }, [guildBoxBattles]);
+
+  useEffect(() => {
+    if (!boxesDraft.collection.length) {
+      setSelectedBoxId(null);
+      return;
+    }
+    if (!selectedBoxId || !boxesDraft.collection.some((box) => box.id === selectedBoxId)) {
+      setSelectedBoxId(boxesDraft.collection[0].id);
+    }
+  }, [boxesDraft.collection, selectedBoxId]);
+
+  useEffect(() => {
+    if (editingBoxId && !boxesDraft.collection.some((box) => box.id === editingBoxId)) {
+      setEditingBoxId(null);
+    }
+  }, [boxesDraft.collection, editingBoxId]);
+
+  const prevLocationKeyRef = useRef(location.key);
+
+  useEffect(() => {
+    const prevKey = prevLocationKeyRef.current;
+    if (prevKey !== location.key && editingBoxId) {
+      setEditingBoxId(null);
+    }
+    prevLocationKeyRef.current = location.key;
+  }, [location.key, editingBoxId]);
+
   const availableBoxItems = useMemo(() => {
     const names = new Set();
     (guild.items?.catalog ?? []).forEach((item) => names.add(item.name));
-    guild.boxes.collection.forEach((box) => box.items.forEach((item) => names.add(item.name)));
+    boxesDraft.collection.forEach((box) => box.items.forEach((item) => names.add(item.name)));
     return Array.from(names);
-  }, [guild.boxes.collection, guild.items?.catalog]);
+  }, [guild.items?.catalog, boxesDraft.collection]);
+
   const itemRarityMap = useMemo(() => {
     const map = {};
     (guild.items?.catalog ?? []).forEach((item) => {
@@ -43,74 +168,41 @@ export default function GuildBoxesPage() {
     return map;
   }, [guild.items?.catalog]);
 
-  useEffect(() => {
-    if (editingBoxId && !guild.boxes.collection.some((box) => box.id === editingBoxId)) {
-      setEditingBoxId(null);
-    }
-  }, [editingBoxId, guild.boxes.collection]);
+  const selectedBox = boxesDraft.collection.find((box) => box.id === selectedBoxId) ?? null;
+  const editingBox = editingBoxId ? boxesDraft.collection.find((box) => box.id === editingBoxId) ?? null : null;
 
-  useEffect(() => {
-    if (!guild.boxes.collection.length) {
-      setSelectedBoxId(null);
-      return;
-    }
+  const boxIssues = useMemo(() => {
+    const issues = {};
+    boxesDraft.collection.forEach((box) => {
+      const issue = getOddsIssue(box);
+      if (issue) issues[box.id] = issue;
+    });
+    return issues;
+  }, [boxesDraft.collection]);
 
-    if (!selectedBoxId || !guild.boxes.collection.some((box) => box.id === selectedBoxId)) {
-      setSelectedBoxId(guild.boxes.collection[0].id);
-    }
-  }, [guild.boxes.collection, selectedBoxId]);
-  useEffect(() => {
-    setGuildSnapshot(JSON.stringify(guild));
-  }, [selectedGuild?.id]);
+  const hasBlockingIssue = Object.keys(boxIssues).length > 0;
+  const editingIssue = editingBox ? boxIssues[editingBox.id] ?? null : null;
 
-  useEffect(() => {
-    if (lastSaved) {
-      setGuildSnapshot(JSON.stringify(guild));
-    }
-  }, [lastSaved]);
+  const hasUnsavedChanges = useMemo(() => {
+    const baseChanged = JSON.stringify(boxesDraft) !== JSON.stringify(guildBoxes);
+    const battleChanged = JSON.stringify(boxBattlesDraft) !== JSON.stringify(guildBoxBattles);
+    return baseChanged || battleChanged;
+  }, [boxesDraft, guildBoxes, boxBattlesDraft, guildBoxBattles]);
 
-  useEffect(() => {
-    guildSnapshotRef.current = guildSnapshot;
-  }, [guildSnapshot]);
+  const updateBehavior = (patch) => {
+    setBoxesDraft((prev) => ({ ...prev, behavior: { ...prev.behavior, ...patch } }));
+  };
 
-  useEffect(() => {
-    hasGuildChangesRef.current = hasGuildChanges;
-  }, [hasGuildChanges]);
-
-  useEffect(() => {
-    editingBoxIdRef.current = editingBoxId;
-  }, [editingBoxId]);
-
-  useEffect(
-    () => () => {
-      if (editingBoxIdRef.current) {
-        exitEditor(true);
-        return;
-      }
-      if (hasGuildChangesRef.current) {
-        try {
-          const snapshot = JSON.parse(guildSnapshotRef.current);
-          updateGuild(() => snapshot);
-        } catch {
-          // ignore restore errors
-        }
-      }
-    },
-    [], // run cleanup on unmount only
-  );
-
-  useEffect(() => {
-    if (!editingBoxId) return;
-    if (!location.pathname.endsWith('/boxes')) return;
-    setEditingBoxId(null);
-    setEditorError('');
-    setEditorSnapshot(null);
-  }, [location.key]);
+  const updateBox = (boxId, patch) => {
+    setBoxesDraft((prev) => ({
+      ...prev,
+      collection: prev.collection.map((box) => (box.id === boxId ? { ...box, ...patch } : box)),
+    }));
+  };
 
   const addBox = () => {
-    const newId = `box-${Date.now()}`;
     const newBox = {
-      id: newId,
+      id: createId('box'),
       name: 'New box',
       color: '#7c3aed',
       price: 0,
@@ -118,155 +210,134 @@ export default function GuildBoxesPage() {
       items: [],
     };
 
-    setSelectedBoxId(newId);
+    setBoxesDraft((prev) => ({ ...prev, collection: [...prev.collection, newBox] }));
+    setSelectedBoxId(newBox.id);
     setEditingBoxId(null);
-    updateGuild((prev) => ({
-      ...prev,
-      boxes: {
-        ...prev.boxes,
-        collection: [...prev.boxes.collection, newBox],
-      },
-    }));
   };
 
-  const updateBox = (id, patch) => {
-    updateGuild((prev) => ({
+  const removeBox = (boxId) => {
+    setBoxesDraft((prev) => ({
       ...prev,
-      boxes: {
-        ...prev.boxes,
-        collection: prev.boxes.collection.map((box) => (box.id === id ? { ...box, ...patch } : box)),
-      },
+      collection: prev.collection.filter((box) => box.id !== boxId),
     }));
-  };
-
-  const removeBox = (id) => {
-    updateGuild((prev) => ({
-      ...prev,
-      boxes: { ...prev.boxes, collection: prev.boxes.collection.filter((box) => box.id !== id) },
-    }));
+    if (selectedBoxId === boxId) {
+      setSelectedBoxId(null);
+    }
+    if (editingBoxId === boxId) {
+      setEditingBoxId(null);
+    }
   };
 
   const addBoxItem = (boxId) => {
-    updateGuild((prev) => ({
+    const nextItem = {
+      id: createId('box-item'),
+      name: 'Mystery drop',
+      odds: 1,
+      quantity: 1,
+      rarity: 'Common',
+    };
+
+    setBoxesDraft((prev) => ({
       ...prev,
-      boxes: {
-        ...prev.boxes,
-        collection: prev.boxes.collection.map((box) =>
-          box.id === boxId
-            ? {
-                ...box,
-                items: [
-                  ...box.items,
-                  { id: `box-item-${Date.now()}`, name: 'Mystery drop', odds: 1, quantity: 1, rarity: 'Common' },
-                ],
-              }
-            : box,
-        ),
-      },
+      collection: prev.collection.map((box) =>
+        box.id === boxId ? { ...box, items: [...box.items, nextItem] } : box,
+      ),
     }));
   };
 
   const updateBoxItem = (boxId, itemId, patch) => {
-    updateGuild((prev) => ({
+    setBoxesDraft((prev) => ({
       ...prev,
-      boxes: {
-        ...prev.boxes,
-        collection: prev.boxes.collection.map((box) =>
-          box.id === boxId
-            ? {
-                ...box,
-                items: box.items.map((item) => (item.id === itemId ? { ...item, ...patch } : item)),
-              }
-            : box,
-        ),
-      },
-    }));
-  };
-
-  const reorderBoxItems = (boxId) => {
-    updateGuild((prev) => ({
-      ...prev,
-      boxes: {
-        ...prev.boxes,
-        collection: prev.boxes.collection.map((box) =>
-          box.id === boxId
-            ? {
-                ...box,
-                items: [...box.items].sort((a, b) => (Number(a.odds) || 0) - (Number(b.odds) || 0)),
-              }
-            : box,
-        ),
-      },
+      collection: prev.collection.map((box) =>
+        box.id === boxId
+          ? { ...box, items: box.items.map((item) => (item.id === itemId ? { ...item, ...patch } : item)) }
+          : box,
+      ),
     }));
   };
 
   const removeBoxItem = (boxId, itemId) => {
-    updateGuild((prev) => ({
+    setBoxesDraft((prev) => ({
       ...prev,
-      boxes: {
-        ...prev.boxes,
-        collection: prev.boxes.collection.map((box) =>
-          box.id === boxId
-            ? { ...box, items: box.items.filter((item) => item.id !== itemId) }
-            : box,
-        ),
-      },
+      collection: prev.collection.map((box) =>
+        box.id === boxId ? { ...box, items: box.items.filter((item) => item.id !== itemId) } : box,
+      ),
     }));
   };
 
-  const updateBehavior = (patch) => {
-    updateGuild((prev) => ({
+  const reorderBoxItems = (boxId) => {
+    setBoxesDraft((prev) => ({
       ...prev,
-      boxes: { ...prev.boxes, behavior: { ...prev.boxes.behavior, ...patch } },
+      collection: prev.collection.map((box) =>
+        box.id === boxId
+          ? {
+              ...box,
+              items: [...box.items].sort((a, b) => coerceNumber(a.odds, 0) - coerceNumber(b.odds, 0)),
+            }
+          : box,
+      ),
     }));
   };
 
-  const handlePageSave = () => {
-    saveGuild('Mystery boxes saved');
-    setGuildSnapshot(JSON.stringify(guild));
+  const handleItemSelect = (boxId, itemId, nextName) => {
+    const derivedRarity = itemRarityMap[nextName] ?? 'Common';
+    updateBoxItem(boxId, itemId, { name: nextName, rarity: derivedRarity });
   };
-
-  const selectedBox = guild.boxes.collection.find((box) => box.id === selectedBoxId) ?? null;
-  const editingBox = editingBoxId
-    ? guild.boxes.collection.find((box) => box.id === editingBoxId) ?? null
-    : null;
-  const guildSignature = JSON.stringify(guild);
-  const hasGuildChanges = guildSignature !== guildSnapshot;
-  const editorSignature = editingBox ? JSON.stringify(editingBox) : null;
-  const hasEditorChanges = Boolean(
-    editingBox && (editorSnapshot === null || editorSignature !== editorSnapshot),
-  );
 
   const enterEditor = (boxId) => {
-    const target = guild.boxes.collection.find((box) => box.id === boxId);
     setEditingBoxId(boxId);
-    setEditorSnapshot(target ? JSON.stringify(target) : null);
-    setEditorError('');
   };
 
   const exitEditor = () => {
     setEditingBoxId(null);
-    setEditorError('');
-    setEditorSnapshot(null);
   };
 
-  if (editingBox) {
-    const totalOdds = editingBox.items.reduce(
-      (sum, item) => sum + (Number(item.odds) || 0),
-      0,
-    );
-    const oddsError = totalOdds !== 100;
+  const handlePageSave = () => {
+    if (hasBlockingIssue) {
+      showToast('Resolve box odds before saving', 'error');
+      return;
+    }
 
-    const handleEditorSave = () => {
-      if (oddsError) {
-        setEditorError('Total odds must equal 100%');
-        return;
-      }
-      setEditorError('');
-      saveGuild('Mystery box updated');
-      setEditorSnapshot(editorSignature);
-      setGuildSnapshot(JSON.stringify(guild));
-    };
+    updateGuild((prev) => ({
+      ...prev,
+      boxes: serializeBoxes(boxesDraft),
+      boxBattles: serializeBoxBattles(boxBattlesDraft),
+    }));
+    saveGuild('Mystery boxes saved');
+    setEditingBoxId(null);
+  };
+
+  const handleDiscard = () => {
+    setBoxesDraft(deepClone(guildBoxes));
+    setBoxBattlesDraft({ ...guildBoxBattles });
+    setSelectedBoxId(guildBoxes.collection[0]?.id ?? null);
+    setEditingBoxId(null);
+  };
+
+  const renderPageActions = () => (
+    <div className="page-actions">
+      <div>
+        <span>Last saved</span>
+        <strong>{lastSaved ? new Date(lastSaved).toLocaleString() : 'Not yet saved'}</strong>
+      </div>
+      {hasUnsavedChanges && (
+        <div className="page-actions__stack">
+          {hasBlockingIssue && <span className="error-text">Resolve box odds before saving</span>}
+          <div>
+            <button type="button" className="ghost-btn" onClick={handleDiscard}>
+              Discard changes
+            </button>
+            <button type="button" className="primary-btn" onClick={handlePageSave} disabled={hasBlockingIssue}>
+              Save changes
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+
+  if (editingBox) {
+    const totalOdds = editingBox.items.reduce((sum, item) => sum + coerceNumber(item.odds, 0), 0);
 
     return (
       <div className="page-stack guild-dashboard">
@@ -288,7 +359,7 @@ export default function GuildBoxesPage() {
               <div>
                 <h3>Box contents</h3>
                 <p>Edit the loot pool and associated weights.</p>
-                {oddsError && <p className="error-text">Total odds must equal 100%</p>}
+                {editingIssue && <p className="error-text">{editingIssue}</p>}
               </div>
               <button type="button" className="ghost-btn ghost-btn--small" onClick={() => addBoxItem(editingBox.id)}>
                 + Add item
@@ -310,32 +381,23 @@ export default function GuildBoxesPage() {
                     editingBox.items.map((item) => (
                       <tr key={item.id}>
                         <td>
-                          <select
-                            value={item.name}
-                            onChange={(event) => {
-                              const nextName = event.target.value;
-                              const derivedRarity = itemRarityMap[nextName] ?? item.rarity ?? 'Common';
-                              updateBoxItem(editingBox.id, item.id, { name: nextName, rarity: derivedRarity });
-                            }}
-                          >
+                          <select value={item.name} onChange={(event) => handleItemSelect(editingBox.id, item.id, event.target.value)}>
                             {availableBoxItems.length === 0 && <option value="">Select item</option>}
                             {availableBoxItems.map((name) => (
                               <option key={name} value={name}>
                                 {name}
                               </option>
                             ))}
-                            {!availableBoxItems.includes(item.name) && (
-                              <option value={item.name}>{item.name}</option>
-                            )}
+                            {!availableBoxItems.includes(item.name) && <option value={item.name}>{item.name}</option>}
                           </select>
                         </td>
                         <td>
-                          <div className={`percent-input ${oddsError ? 'has-error' : ''}`}>
+                          <div className={`percent-input ${editingIssue ? 'has-error' : ''}`}>
                             <input
                               type="number"
                               min={0}
                               max={100}
-                              value={item.odds}
+                              value={item.odds === '' ? '' : item.odds}
                               onChange={(event) =>
                                 updateBoxItem(editingBox.id, item.id, {
                                   odds: event.target.value === '' ? '' : Number(event.target.value),
@@ -343,9 +405,7 @@ export default function GuildBoxesPage() {
                               }
                               onBlur={(event) => {
                                 if (event.target.value === '') {
-                                  updateBoxItem(editingBox.id, item.id, {
-                                    odds: Number(event.target.min ?? 0),
-                                  });
+                                  updateBoxItem(editingBox.id, item.id, { odds: Number(event.target.min ?? 0) });
                                 }
                               }}
                               onKeyDown={(event) => {
@@ -361,7 +421,7 @@ export default function GuildBoxesPage() {
                           <input
                             type="number"
                             min={0}
-                            value={item.quantity ?? 0}
+                            value={item.quantity === '' ? '' : item.quantity}
                             onChange={(event) =>
                               updateBoxItem(editingBox.id, item.id, {
                                 quantity: event.target.value === '' ? '' : Number(event.target.value),
@@ -369,9 +429,7 @@ export default function GuildBoxesPage() {
                             }
                             onBlur={(event) => {
                               if (event.target.value === '') {
-                                updateBoxItem(editingBox.id, item.id, {
-                                  quantity: Number(event.target.min ?? 0),
-                                });
+                                updateBoxItem(editingBox.id, item.id, { quantity: Number(event.target.min ?? 0) });
                               }
                             }}
                             onKeyDown={(event) => {
@@ -385,11 +443,7 @@ export default function GuildBoxesPage() {
                           <span className="rarity-pill">{item.rarity ?? 'Common'}</span>
                         </td>
                         <td>
-                          <button
-                            type="button"
-                            className="list-icon-btn"
-                            onClick={() => removeBoxItem(editingBox.id, item.id)}
-                          >
+                          <button type="button" className="list-icon-btn" onClick={() => removeBoxItem(editingBox.id, item.id)}>
                             ✕
                           </button>
                         </td>
@@ -410,8 +464,8 @@ export default function GuildBoxesPage() {
             {editingBox.items.length ? (
               <ul className="box-preview-list">
                 {editingBox.items.map((item) => {
-                  const odds = Number(item.odds) || 0;
-                  const quantity = item.quantity ?? 0;
+                  const odds = coerceNumber(item.odds, 0);
+                  const quantity = coerceNumber(item.quantity, 0);
                   const share = totalOdds ? Math.min((odds / totalOdds) * 100, 100) : 0;
                   return (
                     <li key={item.id}>
@@ -434,25 +488,7 @@ export default function GuildBoxesPage() {
             )}
           </aside>
         </div>
-        <div className="page-actions">
-          <div>
-            <span>Last saved</span>
-            <strong>{lastSaved ? new Date(lastSaved).toLocaleString() : 'Not yet saved'}</strong>
-          </div>
-          <div className="page-actions__stack">
-            {editorError && <p className="error-text">{editorError}</p>}
-            {hasEditorChanges && (
-              <button
-                type="button"
-                className="primary-btn"
-                onClick={handleEditorSave}
-                disabled={oddsError}
-              >
-                Save changes
-              </button>
-            )}
-          </div>
-        </div>
+        {renderPageActions()}
       </div>
     );
   }
@@ -471,19 +507,16 @@ export default function GuildBoxesPage() {
           icon="🪄"
           title="General"
           description="Enable boxes, control animation, and global logging."
-          status={guild.boxes.enabled ? 'Active' : 'Disabled'}
+          status={boxesDraft.enabled ? 'Active' : 'Disabled'}
         >
           <ToggleSwitch
             label="Enable mystery boxes"
-            checked={guild.boxes.enabled}
-            onChange={(value) => updateGuild((prev) => ({ ...prev, boxes: { ...prev.boxes, enabled: value } }))}
+            checked={boxesDraft.enabled}
+            onChange={(value) => setBoxesDraft((prev) => ({ ...prev, enabled: value }))}
           />
           <label className="text-control">
             <span>Animation background</span>
-            <select
-              value={guild.boxes.behavior.animationBackground}
-              onChange={(event) => updateBehavior({ animationBackground: event.target.value })}
-            >
+            <select value={boxesDraft.behavior.animationBackground} onChange={(event) => updateBehavior({ animationBackground: event.target.value })}>
               {ANIMATION_BACKGROUNDS.map((option) => (
                 <option key={option.key} value={option.key}>
                   {option.label}
@@ -493,10 +526,7 @@ export default function GuildBoxesPage() {
           </label>
           <label className="text-control">
             <span>Animation speed</span>
-            <select
-              value={guild.boxes.behavior.animationSpeed}
-              onChange={(event) => updateBehavior({ animationSpeed: event.target.value })}
-            >
+            <select value={boxesDraft.behavior.animationSpeed} onChange={(event) => updateBehavior({ animationSpeed: event.target.value })}>
               {ANIMATION_SPEEDS.map((option) => (
                 <option key={option.key} value={option.key}>
                   {option.label}
@@ -506,32 +536,29 @@ export default function GuildBoxesPage() {
           </label>
           <ToggleSwitch
             label="Announce rare openings"
-            checked={guild.boxes.behavior.announceRare}
+            checked={boxesDraft.behavior.announceRare}
             onChange={(value) => updateBehavior({ announceRare: value })}
           />
-          {guild.boxes.behavior.announceRare && (
+          {boxesDraft.behavior.announceRare && (
             <label className="text-control">
               <span>Announcement channel</span>
-              <input
-                value={guild.boxes.behavior.announceChannel}
-                onChange={(event) => updateBehavior({ announceChannel: event.target.value })}
-              />
+              <input value={boxesDraft.behavior.announceChannel} onChange={(event) => updateBehavior({ announceChannel: event.target.value })} />
             </label>
           )}
           <ToggleSwitch
             label="Log every opening"
-            checked={guild.boxes.behavior.logOpenings}
+            checked={boxesDraft.behavior.logOpenings}
             onChange={(value) => updateBehavior({ logOpenings: value })}
           />
           <ToggleSwitch
             label="Stock limited"
-            checked={guild.boxes.behavior.stockLimited}
+            checked={boxesDraft.behavior.stockLimited}
             onChange={(value) => updateBehavior({ stockLimited: value })}
           />
           <ToggleSwitch
             label="Override for-sale switches"
             description="Force all boxes on sale for events."
-            checked={guild.boxes.behavior.forSaleOverride}
+            checked={boxesDraft.behavior.forSaleOverride}
             onChange={(value) => updateBehavior({ forSaleOverride: value })}
           />
         </ModuleCard>
@@ -540,13 +567,13 @@ export default function GuildBoxesPage() {
           icon="🎯"
           title="Customization"
           description="Pick a crate to edit metadata, price, and drop odds."
-          status={`${guild.boxes.collection.length} box${guild.boxes.collection.length === 1 ? '' : 'es'}`}
+          status={`${boxesDraft.collection.length} box${boxesDraft.collection.length === 1 ? '' : 'es'}`}
         >
           <div className="input-row">
             <label className="text-control">
               <select value={selectedBoxId ?? ''} onChange={(event) => setSelectedBoxId(event.target.value || null)}>
-                {guild.boxes.collection.length === 0 && <option value="">No boxes yet</option>}
-                {guild.boxes.collection.map((box) => (
+                {boxesDraft.collection.length === 0 && <option value="">No boxes yet</option>}
+                {boxesDraft.collection.map((box) => (
                   <option key={box.id} value={box.id}>
                     {box.name}
                   </option>
@@ -562,29 +589,20 @@ export default function GuildBoxesPage() {
               <div className="input-row">
                 <label className="text-control">
                   <span>Name</span>
-                  <input
-                    value={selectedBox.name}
-                    onChange={(event) => updateBox(selectedBox.id, { name: event.target.value })}
-                  />
+                  <input value={selectedBox.name} onChange={(event) => updateBox(selectedBox.id, { name: event.target.value })} />
                 </label>
                 <label className="text-control">
                   <span>Accent color</span>
-                  <input
-                    type="color"
-                    value={selectedBox.color}
-                    onChange={(event) => updateBox(selectedBox.id, { color: event.target.value })}
-                  />
+                  <input type="color" value={selectedBox.color} onChange={(event) => updateBox(selectedBox.id, { color: event.target.value })} />
                 </label>
                 <label className="text-control">
                   <span>Price</span>
                   <input
                     type="number"
                     min={0}
-                    value={selectedBox.price}
+                    value={selectedBox.price === '' ? '' : selectedBox.price}
                     onChange={(event) =>
-                      updateBox(selectedBox.id, {
-                        price: event.target.value === '' ? '' : Number(event.target.value),
-                      })
+                      updateBox(selectedBox.id, { price: event.target.value === '' ? '' : Number(event.target.value) })
                     }
                     onBlur={(event) => {
                       if (event.target.value === '') {
@@ -610,9 +628,7 @@ export default function GuildBoxesPage() {
               </button>
             </>
           ) : (
-            <p className="helper-text">
-              No boxes yet. Create your first crate to start customizing drops and odds.
-            </p>
+            <p className="helper-text">No boxes yet. Create your first crate to start customizing drops and odds.</p>
           )}
         </ModuleCard>
 
@@ -620,12 +636,12 @@ export default function GuildBoxesPage() {
           icon="⚔️"
           title="Box battles (beta)"
           description="PvP openings for whales and highlight reels."
-          status={guild.boxBattles.enabled ? 'Active' : 'Disabled'}
+          status={boxBattlesDraft.enabled ? 'Active' : 'Disabled'}
         >
           <ToggleSwitch
             label="Enable box battles"
-            checked={guild.boxBattles.enabled}
-            onChange={(value) => updateGuild((prev) => ({ ...prev, boxBattles: { ...prev.boxBattles, enabled: value } }))}
+            checked={boxBattlesDraft.enabled}
+            onChange={(value) => setBoxBattlesDraft({ enabled: value })}
           />
           <p className="helper-text">
             Four-player duels open identical boxes simultaneously with dramatic overlays and shareable stats.
@@ -633,30 +649,7 @@ export default function GuildBoxesPage() {
         </ModuleCard>
       </div>
 
-      <div className="page-actions">
-        <div>
-          <span>Last saved</span>
-          <strong>{lastSaved ? new Date(lastSaved).toLocaleString() : 'Not yet saved'}</strong>
-        </div>
-        {hasGuildChanges && (
-          <button type="button" className="primary-btn" onClick={handlePageSave}>
-            Save changes
-          </button>
-        )}
-      </div>
+      {renderPageActions()}
     </div>
   );
 }
-  useEffect(
-    () => () => {
-      if (editingBoxId) return;
-      if (!hasGuildChanges) return;
-      try {
-        const snapshot = JSON.parse(guildSnapshot);
-        updateGuild(() => snapshot);
-      } catch {
-        // ignore corrupted snapshot
-      }
-    },
-    [editingBoxId, hasGuildChanges, guildSnapshot, updateGuild],
-  );
