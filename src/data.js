@@ -1,6 +1,7 @@
 export const TOP_NAV_LINKS = [
   { label: 'Dashboard', to: '/app', end: true },
   { label: 'Docs', to: '/docs', end: true },
+  { label: 'Support Server', external: true, href: 'https://discord.gg/qyajpWYHja' },
 ];
 
 export const SIDEBAR_GROUPS = [
@@ -12,9 +13,12 @@ export const SIDEBAR_GROUPS = [
     title: 'Modules',
     items: [
       { key: 'guild-economy', label: 'Economy', icon: '💸', path: '/app/guild/economy' },
-      { key: 'guild-items', label: 'Items & Boxes', icon: '🎁', path: '/app/guild/items' },
+      { key: 'guild-items', label: 'Items', icon: '🎫', path: '/app/guild/items' },
+      { key: 'guild-boxes', label: 'Mystery Boxes', icon: '🎁', path: '/app/guild/boxes' },
       { key: 'guild-market', label: 'Marketplace', icon: '🛍️', path: '/app/guild/marketplace' },
-      { key: 'guild-raffles', label: 'Raffles & Battles', icon: '🎟️', path: '/app/guild/raffles' },
+      { key: 'guild-trades', label: 'Trades & Gifts', icon: '🤝', path: '/app/guild/trades' },
+      { key: 'guild-auctions', label: 'Auctions', icon: '🏦', path: '/app/guild/auctions' },
+      { key: 'guild-raffles', label: 'Raffles', icon: '🎟️', path: '/app/guild/raffles' },
       { key: 'guild-shop', label: 'Server Shop', icon: '🏪', path: '/app/guild/shop' },
       { key: 'guild-leaderboards', label: 'Leaderboards', icon: '🏆', path: '/app/guild/leaderboards' },
       { key: 'guild-audit', label: 'Audit & Billing', icon: '🛡️', path: '/app/guild/audit' },
@@ -406,8 +410,8 @@ export const DEFAULT_SETTINGS = {
           price: 500,
           forSale: true,
           items: [
-            { id: 'box-item-1', name: 'Solar Core', odds: 4 },
-            { id: 'box-item-2', name: 'Photon Case', odds: 20 },
+            { id: 'box-item-1', name: 'Solar Core', odds: 4, quantity: 1, rarity: 'Legendary' },
+            { id: 'box-item-2', name: 'Photon Case', odds: 20, quantity: 4, rarity: 'Rare' },
           ],
         },
       ],
@@ -419,6 +423,7 @@ export const DEFAULT_SETTINGS = {
         logOpenings: true,
         stockLimited: false,
         forSaleOverride: true,
+        openOnPurchase: true,
       },
     },
     marketplaceSuite: {
@@ -440,10 +445,12 @@ export const DEFAULT_SETTINGS = {
       },
     },
     raffles: {
+      enabled: true,
       activeLimit: 3,
       ticketPrice: 150,
       prizeMode: 'item',
       prizeName: 'Mythic Token',
+      prizeQuantity: 1,
       durationDays: 1,
       scalingPot: false,
       prizePoolPercent: 60,
