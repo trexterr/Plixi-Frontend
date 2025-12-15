@@ -1783,6 +1783,10 @@
   gap: 1.5rem;
 }
 
+.page-stack--compact {
+  gap: 1rem;
+}
+
 .card-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -1965,15 +1969,201 @@
 }
 
 .text-control input,
-select {
+.text-control select {
   border-radius: 12px;
   border: 1px solid var(--border);
   background: rgba(255, 255, 255, 0.04);
   padding: 0.65rem 0.9rem;
 }
 
-select {
+.text-control.has-error input,
+.text-control.has-error select {
+  border-color: var(--danger);
+  box-shadow: 0 0 0 1px rgba(255, 139, 139, 0.2);
+}
+
+.text-control select {
   cursor: pointer;
+}
+
+.duration-input {
+  display: flex;
+  gap: 0.6rem;
+}
+
+.duration-input input {
+  flex: 1;
+  min-width: 0;
+}
+
+.duration-input select {
+  width: 140px;
+}
+
+.job-editor {
+  border-radius: 28px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  padding: 1.8rem;
+  background: rgba(5, 8, 23, 0.85);
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.job-editor__top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.8rem;
+}
+
+.job-editor__title {
+  font-weight: 600;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  font-size: 0.78rem;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.job-editor__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.job-editor__top-right {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin-left: auto;
+}
+
+.job-editor__top-right .status-pill {
+  margin-left: 0;
+}
+
+.job-editor__toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin: 0 0 12px;
+}
+
+.job-editor.job-editor--roles {
+  margin-top: 12px;
+}
+
+.job-editor__body {
+  border: none;
+  padding: 0;
+  max-height: 520px;
+  overflow: auto;
+}
+
+.job-chip-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+  padding: 1rem;
+  border-radius: 20px;
+  border: 1px dashed rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.job-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.4rem 0.75rem;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.job-chip__input {
+  border: none;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  min-width: 0;
+  width: auto;
+}
+
+.job-chip__input:focus {
+  outline: none;
+}
+
+.job-chip__remove {
+  border: none;
+  background: rgba(255, 255, 255, 0.12);
+  color: inherit;
+  border-radius: 999px;
+  padding: 0.1rem 0.35rem;
+  cursor: pointer;
+  line-height: 1;
+}
+
+.job-chip__remove:hover {
+  background: rgba(255, 255, 255, 0.22);
+}
+
+.job-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.job-list li {
+  display: flex;
+  gap: 0.6rem;
+  align-items: center;
+  padding: 0.6rem 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.job-list li:last-child {
+  border-bottom: none;
+}
+
+.job-list li input,
+.job-list li select {
+  flex: 1;
+  min-width: 0;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.03);
+  color: inherit;
+  padding: 0.4rem 0.65rem;
+}
+
+.job-list li button {
+  border: none;
+  border-radius: 10px;
+  padding: 0.4rem 0.6rem;
+  background: rgba(255, 255, 255, 0.08);
+  color: inherit;
+  cursor: pointer;
+}
+
+.job-editor--roles .job-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.9rem 1.2rem;
+}
+
+.job-editor--roles .job-list li {
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 16px;
+  padding: 0.85rem;
+}
+
+@media (max-width: 860px) {
+  .job-editor--roles .job-list {
+    grid-template-columns: 1fr;
+  }
 }
 
 .preview-card {
