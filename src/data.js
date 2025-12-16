@@ -24,7 +24,7 @@ export const SIDEBAR_GROUPS = [
     ],
   },
   {
-    title: 'Management',
+    title: 'System',
     items: [
       { key: 'guild-audit', label: 'Audit Logs', icon: '🛡️', path: '/app/guild/audit' },
       { key: 'guild-billing', label: 'Billing', icon: '💳', path: '/app/guild/billing' },

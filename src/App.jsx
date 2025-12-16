@@ -29,6 +29,8 @@ import GuildRafflesPage from './pages/dashboard/GuildRafflesPage';
 import GuildShopPage from './pages/dashboard/GuildShopPage';
 import GuildLeaderboardsPage from './pages/dashboard/GuildLeaderboardsPage';
 import GuildAuditPage from './pages/dashboard/GuildAuditPage';
+import GuildBillingPage from './pages/dashboard/GuildBillingPage';
+import GuildSystemPage from './pages/dashboard/GuildSystemPage';
 import ToastProvider from './components/ToastProvider';
 import TopNavigation from './components/TopNavigation';
 
@@ -74,6 +76,8 @@ function App() {
                     <Route path="shop" element={<GuildShopPage />} />
                     <Route path="leaderboards" element={<GuildLeaderboardsPage />} />
                     <Route path="audit" element={<GuildAuditPage />} />
+                    <Route path="billing" element={<GuildBillingPage />} />
+                    <Route path="system" element={<GuildSystemPage />} />
                     <Route path="trades" element={<GuildTradesPage />} />
                   </Route>
                 </Route>
