@@ -2,9 +2,23 @@ import { NavLink, Link } from 'react-router-dom';
 import { TOP_NAV_LINKS } from '../data';
 import { useSelectedGuild } from '../context/SelectedGuildContext';
 import plixiLogo from '../assets/PLIXI_OFFICIAL_PFP.png';
+import { supabase } from '../lib/supabase';
 
 export default function TopNavigation() {
-  const { user, selectedGuild } = useSelectedGuild();
+  const { user } = useSelectedGuild();
+
+  const handleDiscordLogin = async () => {
+    try {
+      await supabase.auth.signInWithOAuth({
+        provider: 'discord',
+        options: {
+          redirectTo: `${window.location.origin}/auth`,
+        },
+      });
+    } catch (error) {
+      console.error('Discord login failed', error);
+    }
+  };
 
   return (
     <header className="top-nav">
@@ -48,10 +62,16 @@ export default function TopNavigation() {
         <Link to="/pricing" className="primary-btn">
           Premium
         </Link>
-        <div className="avatar-chip">
-          <img src={user.avatar} alt={user.username} />
-          <span>{user.username}</span>
-        </div>
+        {user ? (
+          <div className="avatar-chip">
+            <img src={user.avatar} alt={user.displayName} />
+            <span>{user.displayName}</span>
+          </div>
+        ) : (
+          <button type="button" className="outline-btn" onClick={handleDiscordLogin}>
+            Login with Discord
+          </button>
+        )}
       </div>
     </header>
   );

@@ -260,15 +260,6 @@ export const FEATURE_FLAG_DEFAULTS = FEATURE_MODULES.reduce((acc, module) => {
   return acc;
 }, {});
 
-export const MOCK_USER = {
-  id: 'plixi-admin',
-  username: 'Ari Rhythm',
-  discriminator: '1024',
-  avatar: 'https://i.pravatar.cc/80?img=47',
-  banner: 'https://images.unsplash.com/photo-1469474968028-56623f02e42e?auto=format&fit=crop&w=800&q=60',
-  planTier: 'Creator',
-};
-
 export const MOCK_GUILDS = [
   {
     id: 'guild-starlance',

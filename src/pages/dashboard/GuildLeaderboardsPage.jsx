@@ -23,19 +23,12 @@ export default function GuildLeaderboardsPage() {
     });
   };
 
-  const updatePermissions = (field, value) => {
-    updateGuild((prev) => ({
-      ...prev,
-      permissions: { ...prev.permissions, [field]: value.split('\n').map((entry) => entry.trim()).filter(Boolean) },
-    }));
-  };
-
   return (
     <div className="page-stack guild-dashboard">
       <SectionHeader
         eyebrow="Guild Dashboard"
-        title="Leaderboards & Permissions"
-        subtitle={`Expose cadences and gate commands for ${selectedGuild?.name ?? 'your guild'}.`}
+        title="Leaderboards"
+        subtitle={`Expose cadences and rankings for ${selectedGuild?.name ?? 'your guild'}.`}
         meta={<span className="status-pill">Leaderboards</span>}
       />
 
@@ -81,38 +74,6 @@ export default function GuildLeaderboardsPage() {
           </div>
         </ModuleCard>
 
-        <ModuleCard
-          icon="🛡️"
-          title="Permissions & roles"
-          description="Who can run what, plus block lists."
-          status="Active"
-        >
-          <label className="text-control">
-            <span>Admin roles</span>
-            <textarea
-              rows={3}
-              value={guild.permissions.adminRoles.join('\n')}
-              onChange={(event) => updatePermissions('adminRoles', event.target.value)}
-            />
-          </label>
-          <label className="text-control">
-            <span>Restricted roles</span>
-            <textarea
-              rows={3}
-              value={guild.permissions.blockedRoles.join('\n')}
-              onChange={(event) => updatePermissions('blockedRoles', event.target.value)}
-            />
-          </label>
-          <label className="text-control">
-            <span>Command restrictions</span>
-            <textarea
-              rows={3}
-              placeholder="/pay, /gift..."
-              value={guild.permissions.commandRestrictions.join('\n')}
-              onChange={(event) => updatePermissions('commandRestrictions', event.target.value)}
-            />
-          </label>
-        </ModuleCard>
       </div>
 
       <div className="page-actions">

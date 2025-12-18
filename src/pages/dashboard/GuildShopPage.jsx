@@ -1,10 +1,39 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import SectionHeader from '../../components/SectionHeader';
 import ModuleCard from '../../components/ModuleCard';
 import NumberInput from '../../components/NumberInput';
 import useGuildSettings from '../../hooks/useGuildSettings';
 
 const SLOT_BATCH_SIZE = 8;
+const DAY_RAIL_INITIAL_SPAN = 60;
+const DAY_RAIL_BATCH = 30;
+
+const toISODateString = (date) => {
+  const utcDate = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+  return utcDate.toISOString().split('T')[0];
+};
+
+const parseISODateString = (iso) => {
+  const [year, month, day] = iso.split('-').map(Number);
+  return new Date(Date.UTC(year, month - 1, day));
+};
+
+const shiftISODate = (iso, amount) => {
+  const date = parseISODateString(iso);
+  date.setUTCDate(date.getUTCDate() + amount);
+  return toISODateString(date);
+};
+
+const createDayRange = (startIso, count) => {
+  const startDate = parseISODateString(startIso);
+  const days = [];
+  for (let index = 0; index < count; index += 1) {
+    const next = new Date(startDate);
+    next.setUTCDate(startDate.getUTCDate() + index);
+    days.push(toISODateString(next));
+  }
+  return days;
+};
 
 const uniqueId = () => `${Date.now()}-${Math.random().toString(16).slice(2, 6)}`;
 
@@ -32,6 +61,87 @@ export default function GuildShopPage() {
   const [expandedSlotId, setExpandedSlotId] = useState(null);
   const [activeEditor, setActiveEditor] = useState(null);
   const [isAppearancePreviewing, setIsAppearancePreviewing] = useState(false);
+  const todayIso = useMemo(() => toISODateString(new Date()), []);
+  const tomorrowIso = useMemo(() => shiftISODate(todayIso, 1), [todayIso]);
+  const [dayRailDates, setDayRailDates] = useState(() => createDayRange(todayIso, DAY_RAIL_INITIAL_SPAN));
+  const dayRailRef = useRef(null);
+  const dayButtonRefs = useRef({});
+  const extendDayRailForward = useCallback(() => {
+    setDayRailDates((prev) => {
+      if (!prev.length) return prev;
+      const start = shiftISODate(prev[prev.length - 1], 1);
+      return [...prev, ...createDayRange(start, DAY_RAIL_BATCH)];
+    });
+  }, []);
+
+  const ensureDayInRail = useCallback((targetIso) => {
+    if (!targetIso) return;
+    setDayRailDates((prev) => {
+      if (!prev.length) return [targetIso];
+      let next = prev;
+      let mutated = false;
+      let first = next[0];
+      while (targetIso < first) {
+        const newDay = shiftISODate(first, -1);
+        next = [newDay, ...next];
+        first = newDay;
+        mutated = true;
+      }
+      let last = next[next.length - 1];
+      while (targetIso > last) {
+        const additionStart = shiftISODate(last, 1);
+        next = [...next, ...createDayRange(additionStart, DAY_RAIL_BATCH)];
+        last = next[next.length - 1];
+        mutated = true;
+      }
+      if (!next.includes(targetIso)) {
+        const insertIndex = next.findIndex((day) => day > targetIso);
+        const clone = [...next];
+        if (insertIndex === -1) {
+          clone.push(targetIso);
+        } else {
+          clone.splice(insertIndex, 0, targetIso);
+        }
+        next = clone;
+        mutated = true;
+      }
+      return mutated ? next : prev;
+    });
+  }, []);
+
+  const centerSelectedDay = useCallback(
+    (dateIso) => {
+      const container = dayRailRef.current;
+      const button = dayButtonRefs.current[dateIso];
+      if (!container || !button) return;
+      if (dateIso === todayIso || dateIso === tomorrowIso) {
+        container.scrollTo({ left: 0, behavior: 'smooth' });
+        return;
+      }
+      const offset = button.offsetLeft - container.clientWidth / 2 + button.offsetWidth / 2;
+      container.scrollTo({ left: Math.max(offset, 0), behavior: 'smooth' });
+    },
+    [todayIso, tomorrowIso],
+  );
+
+  const formatDayPrimaryLabel = (iso) => {
+    if (iso === todayIso) return 'Today';
+    if (iso === tomorrowIso) return 'Tomorrow';
+    return parseISODateString(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+  };
+
+  const formatDaySecondaryLabel = (iso) =>
+    parseISODateString(iso).toLocaleDateString(undefined, { weekday: 'short' });
+
+  const handleDayRailScroll = useCallback(
+    (event) => {
+      const target = event.currentTarget;
+      if (target.scrollLeft + target.clientWidth >= target.scrollWidth - 120) {
+        extendDayRailForward();
+      }
+    },
+    [extendDayRailForward],
+  );
 
   const updateServerShop = (patch) => {
     updateGuild((prev) => ({ ...prev, serverShop: { ...prev.serverShop, ...patch } }));
@@ -56,6 +166,17 @@ export default function GuildShopPage() {
   }, [schedule, selectedDate]);
 
   const previewEntries = serverShop.itemMode === 'scheduled' ? currentScheduleDay?.slots ?? [] : randomizedPool;
+
+  useEffect(() => {
+    if (!selectedDate) return;
+    ensureDayInRail(selectedDate);
+  }, [selectedDate, ensureDayInRail]);
+
+  useEffect(() => {
+    if (!selectedDate) return;
+    if (!dayButtonRefs.current[selectedDate]) return;
+    centerSelectedDay(selectedDate);
+  }, [selectedDate, dayRailDates, centerSelectedDay]);
 
   useEffect(() => {
     if (activeEditor !== 'scheduled') {
@@ -348,18 +469,29 @@ export default function GuildShopPage() {
           <span>Select date</span>
           <input type="date" value={selectedDate} onChange={(event) => handleDateSelect(event.target.value)} />
         </label>
-        {schedule.length > 1 && (
-          <div className="schedule-day-picker">
-            {schedule
-              .slice()
-              .sort((a, b) => a.date.localeCompare(b.date))
-              .map((day) => (
-                <button type="button" key={day.id} className={day.date === selectedDate ? 'is-active' : ''} onClick={() => handleDateSelect(day.date)}>
-                  {new Date(`${day.date}T00:00:00`).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
-                </button>
-              ))}
-          </div>
-        )}
+        <div className="schedule-day-picker" ref={dayRailRef} onScroll={handleDayRailScroll}>
+          {dayRailDates.map((date) => {
+            const isActive = date === selectedDate;
+            return (
+              <button
+                key={date}
+                type="button"
+                className={isActive ? 'is-active' : ''}
+                onClick={() => handleDateSelect(date)}
+                ref={(node) => {
+                  if (node) {
+                    dayButtonRefs.current[date] = node;
+                  } else {
+                    delete dayButtonRefs.current[date];
+                  }
+                }}
+              >
+                <span>{formatDayPrimaryLabel(date)}</span>
+                <small>{formatDaySecondaryLabel(date)}</small>
+              </button>
+            );
+          })}
+        </div>
         {currentScheduleDay ? (
           <>
             <div className="slot-accordion">
