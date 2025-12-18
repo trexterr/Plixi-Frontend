@@ -1,7 +1,7 @@
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 
-import { MOCK_GUILDS, MOCK_USER } from './data';
+import { MOCK_GUILDS } from './data';
 import { SelectedGuildProvider } from './context/SelectedGuildContext';
 import { DashboardDataProvider } from './context/DashboardDataContext';
 import DashboardShell from './pages/DashboardShell';
@@ -17,6 +17,7 @@ import SettingsPage from './pages/dashboard/SettingsPage';
 import MarketingHomePage from './pages/MarketingHomePage';
 import PricingPage from './pages/PricingPage';
 import DocsPage from './pages/DocsPage';
+import AuthCallbackPage from './pages/AuthCallbackPage';
 import JobsPage from './pages/dashboard/JobsPage';
 import XPPage from './pages/dashboard/XPPage';
 import GuildEconomyPage from './pages/dashboard/GuildEconomyPage';
@@ -33,26 +34,79 @@ import GuildBillingPage from './pages/dashboard/GuildBillingPage';
 import GuildSystemPage from './pages/dashboard/GuildSystemPage';
 import ToastProvider from './components/ToastProvider';
 import TopNavigation from './components/TopNavigation';
+import { supabase } from './lib/supabase';
+
+const mapDiscordUser = (sessionUser) => {
+  if (!sessionUser) return null;
+  const metadata = sessionUser.user_metadata ?? {};
+  const displayName =
+    metadata.global_name ||
+    metadata.display_name ||
+    metadata.full_name ||
+    metadata.name ||
+    metadata.preferred_username ||
+    metadata.user_name ||
+    sessionUser.email ||
+    'Discord User';
+  const avatar = metadata.avatar_url || metadata.picture || metadata.avatar;
+
+  return {
+    id: sessionUser.id,
+    displayName,
+    avatar: avatar ?? 'https://cdn.discordapp.com/embed/avatars/0.png',
+    metadata,
+  };
+};
 
 function App() {
   const memoizedGuilds = useMemo(() => MOCK_GUILDS, []);
-  const memoizedUser = useMemo(() => MOCK_USER, []);
+  const [sessionUser, setSessionUser] = useState(null);
 
   useEffect(() => {
     document.title = 'Plixi - Control center';
   }, []);
 
+  useEffect(() => {
+    let isMounted = true;
+
+    const loadSession = async () => {
+      try {
+        const { data } = await supabase.auth.getSession();
+        if (!isMounted) return;
+        setSessionUser(mapDiscordUser(data?.session?.user ?? null));
+      } catch (error) {
+        console.error('Failed to load Supabase session', error);
+      }
+    };
+
+    loadSession();
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (!isMounted) return;
+      setSessionUser(mapDiscordUser(session?.user ?? null));
+    });
+
+    return () => {
+      isMounted = false;
+      subscription.unsubscribe();
+    };
+  }, []);
+
   return (
     <BrowserRouter>
       <ToastProvider>
-        <SelectedGuildProvider guilds={memoizedGuilds} user={memoizedUser}>
+        <SelectedGuildProvider guilds={memoizedGuilds} user={sessionUser}>
           <DashboardDataProvider>
             <div className="app-shell">
               <TopNavigation />
               <Routes>
                 <Route path="/" element={<MarketingHomePage />} />
                 <Route path="/docs" element={<DocsPage />} />
+                <Route path="/docs/:sectionSlug" element={<DocsPage />} />
                 <Route path="/pricing" element={<PricingPage />} />
+                <Route path="/auth" element={<AuthCallbackPage />} />
                 <Route path="/app" element={<DashboardShell />}>
                   <Route index element={<DashboardHomePage />} />
                   <Route path="economy" element={<EconomyPage />} />

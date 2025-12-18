@@ -5,6 +5,19 @@ import useGuildSettings from '../../hooks/useGuildSettings';
 export default function GuildSystemPage() {
   const { guild, updateGuild, saveGuild, selectedGuild, lastSaved } = useGuildSettings();
 
+  const updatePermissions = (field, value) => {
+    updateGuild((prev) => ({
+      ...prev,
+      permissions: {
+        ...prev.permissions,
+        [field]: value
+          .split('\n')
+          .map((entry) => entry.trim())
+          .filter(Boolean),
+      },
+    }));
+  };
+
   return (
     <div className="page-stack guild-dashboard">
       <SectionHeader
@@ -42,6 +55,34 @@ export default function GuildSystemPage() {
                   system: { ...prev.system, timezone: event.target.value },
                 }))
               }
+            />
+          </label>
+        </ModuleCard>
+
+        <ModuleCard icon="🛡️" title="Permissions & Roles" description="Control who can run commands or manage systems." status="Active">
+          <label className="text-control">
+            <span>Admin roles</span>
+            <textarea
+              rows={3}
+              value={guild.permissions.adminRoles.join('\n')}
+              onChange={(event) => updatePermissions('adminRoles', event.target.value)}
+            />
+          </label>
+          <label className="text-control">
+            <span>Restricted roles</span>
+            <textarea
+              rows={3}
+              value={guild.permissions.blockedRoles.join('\n')}
+              onChange={(event) => updatePermissions('blockedRoles', event.target.value)}
+            />
+          </label>
+          <label className="text-control">
+            <span>Command restrictions</span>
+            <textarea
+              rows={3}
+              placeholder="/pay, /gift..."
+              value={guild.permissions.commandRestrictions.join('\n')}
+              onChange={(event) => updatePermissions('commandRestrictions', event.target.value)}
             />
           </label>
         </ModuleCard>
