@@ -15,9 +15,6 @@ export default function TopNavigation() {
     try {
       await supabase.auth.signInWithOAuth({
         provider: 'discord',
-        options: {
-          redirectTo: `${window.location.origin}/auth`,
-        },
       });
     } catch (error) {
       console.error('Discord login failed', error);
