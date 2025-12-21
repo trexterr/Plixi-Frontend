@@ -147,39 +147,41 @@ function App() {
           return;
         }
 
-        const { data, error } = await supabase
+        const { data: memberships, error: membershipError } = await supabase
           .from('user_guilds')
-          .select(
-            `
-            guild:guild_id (
-              guild_id,
-              name,
-              plan,
-              member_count,
-              owner_id,
-              last_updated,
-              icon_hash
-            )
-          `,
-          )
           .eq('user_id', discordId)
           .eq('can_manage', true);
 
-        if (error) throw error;
+        if (membershipError) throw membershipError;
 
-        const normalized = Array.isArray(data)
-          ? data
+        const guildIds = Array.isArray(memberships)
+          ? memberships
+              .map((row) => (row?.guild_id !== undefined && row.guild_id !== null ? String(row.guild_id) : null))
+              .filter(Boolean)
+          : [];
+
+        if (!guildIds.length) {
+          setGuilds([]);
+          return;
+        }
+
+        const { data: guildRows, error: guildError } = await supabase
+          .from('guilds')
+          .select('guild_id, name, plan, member_count, owner_id, last_updated, icon_hash')
+          .in('guild_id', guildIds);
+
+        if (guildError) throw guildError;
+
+        const normalized = Array.isArray(guildRows)
+          ? guildRows
               .map((row) =>
-                row?.guild
-                  ? normalizeDiscordGuild({
-                      id: row.guild.guild_id,
-                      name: row.guild.name,
-                      icon_hash: row.guild.icon_hash,
-                      icon: row.guild.icon_hash,
-                      premium_subscription_count: row.guild.plan !== 'Free',
-                      approximate_member_count: row.guild.member_count,
-                    })
-                  : null,
+                normalizeDiscordGuild({
+                  id: row.guild_id,
+                  name: row.name,
+                  icon_hash: row.icon_hash,
+                  premium_subscription_count: row.plan && row.plan.toLowerCase() !== 'free' ? 1 : 0,
+                  approximate_member_count: row.member_count,
+                }),
               )
               .filter(Boolean)
           : [];
