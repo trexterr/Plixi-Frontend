@@ -36,7 +36,7 @@ export default function ServerPickerPage() {
       style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '40px 0' }}
     >
       <div className="panel" style={{ maxWidth: 720, width: '100%' }}>
-        <header>
+        <header style={{ textAlign: 'center' }}>
           <p className="eyebrow">Server access</p>
           <h1>Select a Discord server</h1>
           <p>These are the servers you can manage. Choose one to open the dashboard or invite Plixi to another server.</p>
@@ -69,7 +69,7 @@ export default function ServerPickerPage() {
           </div>
         )}
 
-        <div className="server-picker__actions">
+        <div className="server-picker__actions" style={{ textAlign: 'center' }}>
           <button type="button" className="primary-btn" onClick={handleInvite}>
             Invite Plixi to another server
           </button>

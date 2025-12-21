@@ -142,6 +142,15 @@ function App() {
       try {
         const { data: userData } = await supabase.auth.getUser();
         const discordId = extractDiscordUserId(userData?.user ?? null) || extractDiscordUserId(sessionUser);
+        const userIdFilter = Number.isFinite(Number(discordId)) ? Number(discordId) : discordId;
+
+        console.debug('Guild fetch — Supabase user', {
+          supabaseId: userData?.user?.id,
+          discordId,
+          userMetadata: userData?.user?.user_metadata,
+          identities: userData?.user?.identities,
+        });
+
         if (!discordId) {
           setGuilds([]);
           return;
@@ -149,7 +158,7 @@ function App() {
 
         const { data: memberships, error: membershipError } = await supabase
           .from('user_guilds')
-          .eq('user_id', discordId)
+          .eq('user_id', userIdFilter)
           .eq('can_manage', true);
 
         if (membershipError) throw membershipError;
@@ -165,12 +174,16 @@ function App() {
           return;
         }
 
+        console.debug('Guild fetch — memberships', memberships);
+
         const { data: guildRows, error: guildError } = await supabase
           .from('guilds')
           .select('guild_id, name, plan, member_count, owner_id, last_updated, icon_hash')
           .in('guild_id', guildIds);
 
         if (guildError) throw guildError;
+
+        console.debug('Guild fetch — guild rows', guildRows);
 
         const normalized = Array.isArray(guildRows)
           ? guildRows
