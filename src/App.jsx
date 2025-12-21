@@ -141,8 +141,26 @@ function App() {
 
       try {
         const { data: userData } = await supabase.auth.getUser();
-        const discordId = extractDiscordUserId(userData?.user ?? null) || extractDiscordUserId(sessionUser);
+        let discordId = extractDiscordUserId(userData?.user ?? null) || extractDiscordUserId(sessionUser);
+
+        // Fallback: read discord_id from our users table if metadata is missing
         if (!discordId) {
+          try {
+            const { data: profile } = await supabase
+              .from('users')
+              .select('discord_id')
+              .eq('id', sessionUser.id)
+              .maybeSingle();
+            if (profile?.discord_id) {
+              discordId = String(profile.discord_id);
+            }
+          } catch (profileError) {
+            console.error('Failed to load profile discord_id', profileError);
+          }
+        }
+
+        if (!discordId) {
+          console.debug('Guild fetch — no discordId resolved');
           setGuilds([]);
           return;
         }
