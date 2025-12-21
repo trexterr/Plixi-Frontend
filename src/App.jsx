@@ -142,7 +142,10 @@ function App() {
       try {
         const { data: userData } = await supabase.auth.getUser();
         const discordId = extractDiscordUserId(userData?.user ?? null) || extractDiscordUserId(sessionUser);
-        const userIdFilter = Number.isFinite(Number(discordId)) ? Number(discordId) : discordId;
+        if (!discordId) {
+          setGuilds([]);
+          return;
+        }
 
         console.debug('Guild fetch — Supabase user', {
           supabaseId: userData?.user?.id,
@@ -151,14 +154,9 @@ function App() {
           identities: userData?.user?.identities,
         });
 
-        if (!discordId) {
-          setGuilds([]);
-          return;
-        }
-
         const { data: memberships, error: membershipError } = await supabase
           .from('user_guilds')
-          .eq('user_id', userIdFilter)
+          .eq('user_id', discordId)
           .eq('can_manage', true);
 
         if (membershipError) throw membershipError;
