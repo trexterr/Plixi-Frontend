@@ -138,7 +138,8 @@ function App() {
           console.error('[guilds] Failed to load profile discord_id', profileError);
         }
 
-        const discordId = profile?.discord_id ?? null;
+        const discordIdRaw = profile?.discord_id ?? null;
+        const discordId = discordIdRaw !== null && discordIdRaw !== undefined ? String(discordIdRaw) : null;
 
         if (!discordId) {
           console.log('[guilds] No discord_id linked to this user in users_web');
