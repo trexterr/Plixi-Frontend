@@ -56,15 +56,6 @@ export default function GuildRafflesPage() {
     !Number.isFinite(newRaffle.durationValue) ||
     !Number.isInteger(newRaffle.durationValue) ||
     newRaffle.durationValue < 1;
-  const selectedRaffle = activeRaffles.find((raffle) => raffle.id === selectedRaffleId) ?? null;
-  const selectedRaffleTopBuyers = selectedRaffle
-    ? Array.isArray(selectedRaffle.topBuyers)
-      ? selectedRaffle.topBuyers
-      : selectedRaffle.topBuyer
-        ? [{ id: `${selectedRaffle.id}-top`, name: selectedRaffle.topBuyer, tickets: selectedRaffle.ticketsSold ?? 0 }]
-        : []
-    : [];
-  const prizeQuantity = selectedRaffle?.prizeQuantity ?? guild.raffles.prizeQuantity ?? 1;
   const prevLocationKeyRef = useRef(location.key);
   const createRaffleDisabled = !rafflesEnabled || remainingSlots <= 0;
   const canCreateRaffle =
@@ -73,6 +64,14 @@ export default function GuildRafflesPage() {
     () => activeRaffles.find((raffle) => raffle.id === selectedRaffleId) ?? null,
     [activeRaffles, selectedRaffleId],
   );
+  const selectedRaffleTopBuyers = selectedRaffle
+    ? Array.isArray(selectedRaffle.topBuyers)
+      ? selectedRaffle.topBuyers
+      : selectedRaffle.topBuyer
+        ? [{ id: `${selectedRaffle.id}-top`, name: selectedRaffle.topBuyer, tickets: selectedRaffle.ticketsSold ?? 0 }]
+        : []
+    : [];
+  const prizeQuantity = selectedRaffle?.prizeQuantity ?? guild.raffles.prizeQuantity ?? 1;
 
   useEffect(() => {
     const prevKey = prevLocationKeyRef.current;
