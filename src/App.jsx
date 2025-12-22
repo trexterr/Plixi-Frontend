@@ -119,16 +119,6 @@ function App() {
   useEffect(() => {
     let isMounted = true;
 
-    const extractDiscordIdFromMetadata = (user) => {
-      const metadata = user?.metadata ?? {};
-      const raw =
-        metadata.provider_id ||
-        metadata.user_id ||
-        metadata.sub ||
-        null;
-      return raw ? String(raw) : null;
-    };
-
     const fetchGuilds = async () => {
       if (!sessionUser) {
         console.log('[guilds] No session user yet');
@@ -148,9 +138,7 @@ function App() {
           console.error('[guilds] Failed to load profile discord_id', profileError);
         }
 
-        const discordIdFromProfile = profile?.discord_id_text ?? null;
-        const discordIdFromMetadata = extractDiscordIdFromMetadata(sessionUser);
-        const discordId = discordIdFromMetadata || discordIdFromProfile;
+        const discordId = profile?.discord_id_text ?? null;
 
         if (!discordId) {
           console.log('[guilds] No discord_id linked to this user in users_web');
@@ -158,15 +146,12 @@ function App() {
           return;
         }
 
-        console.log('[guilds] Using discordId', discordId, {
-          meta: discordIdFromMetadata,
-          profile: discordIdFromProfile,
-        });
+        console.log('[guilds] Using discordId', discordId);
 
         const { data: memberships, error: membershipError } = await supabase
           .from('user_guilds')
-          .select('guild_id')
-          .filter('user_id::text', 'eq', discordId)
+          .select('guild_id_text:guild_id::text')
+          .eq('user_id::text', discordId)
           .eq('can_manage', true);
 
         if (membershipError) throw membershipError;
@@ -175,7 +160,9 @@ function App() {
 
         const guildIds = Array.isArray(memberships)
           ? memberships
-              .map((row) => (row?.guild_id !== undefined && row.guild_id !== null ? String(row.guild_id) : null))
+              .map((row) =>
+                row?.guild_id_text !== undefined && row.guild_id_text !== null ? String(row.guild_id_text) : null,
+              )
               .filter(Boolean)
           : [];
 
@@ -187,7 +174,7 @@ function App() {
 
         const { data: guildRows, error: guildError } = await supabase
           .from('guilds')
-          .select('guild_id, name, plan, member_count, owner_id, last_updated, icon_hash')
+          .select('guild_id_text:guild_id::text, name, plan, member_count, owner_id, last_updated, icon_hash')
           .filter('guild_id::text', 'in', `(${guildIds.join(',')})`);
 
         if (guildError) throw guildError;
@@ -198,7 +185,7 @@ function App() {
           ? guildRows
               .map((row) =>
                 normalizeDiscordGuild({
-                  id: row.guild_id,
+                  id: row.guild_id_text,
                   name: row.name,
                   icon_hash: row.icon_hash,
                   premium_subscription_count: row.plan && row.plan.toLowerCase() !== 'free' ? 1 : 0,
