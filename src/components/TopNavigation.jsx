@@ -6,10 +6,12 @@ import plixiLogo from '../assets/PLIXI_OFFICIAL_PFP.png';
 import { supabase } from '../lib/supabase';
 
 export default function TopNavigation() {
-  const { user } = useSelectedGuild();
+  const { user, selectedGuildId, guilds } = useSelectedGuild();
   const [menuOpen, setMenuOpen] = useState(false);
   const avatarButtonRef = useRef(null);
   const dropdownRef = useRef(null);
+  const hasGuildSelection = Boolean(selectedGuildId || guilds.length);
+  const dashboardPath = user && hasGuildSelection ? '/app' : '/servers';
 
   const handleDiscordLogin = async () => {
     try {
@@ -66,8 +68,20 @@ export default function TopNavigation() {
       </Link>
 
       <nav className="top-nav-links">
-        {TOP_NAV_LINKS.map((link) => (
-          link.external ? (
+        {TOP_NAV_LINKS.map((link) => {
+          if (link.label === 'Dashboard') {
+            return (
+              <NavLink
+                key={link.label}
+                to={dashboardPath}
+                end
+                className={({ isActive }) => (isActive ? 'active' : '')}
+              >
+                {link.label}
+              </NavLink>
+            );
+          }
+          return link.external ? (
             <a key={link.label} href={link.href} target="_blank" rel="noreferrer">
               {link.label}
             </a>
@@ -80,8 +94,8 @@ export default function TopNavigation() {
             >
               {link.label}
             </NavLink>
-          )
-        ))}
+          );
+        })}
       </nav>
 
       <div className="top-nav-actions">

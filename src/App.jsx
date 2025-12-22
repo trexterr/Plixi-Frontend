@@ -61,6 +61,7 @@ const normalizeDiscordGuild = (guild) => {
   if (!guild?.id || !guild?.name) return null;
   const id = String(guild.id);
   const iconHash = guild.icon_hash || guild.icon;
+  const plan = typeof guild.plan === 'string' && guild.plan.trim() ? guild.plan.trim() : 'Free';
   const iconUrl =
     iconHash && id
       ? `https://cdn.discordapp.com/icons/${id}/${iconHash}.png?size=64`
@@ -70,6 +71,7 @@ const normalizeDiscordGuild = (guild) => {
     id,
     name: guild.name,
     icon: iconUrl,
+    plan,
     memberCount:
       typeof guild.approximate_member_count === 'number'
         ? guild.approximate_member_count

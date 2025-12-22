@@ -9,7 +9,13 @@ const INVITE_URL =
 const renderGuildIcon = (guild) => {
   const icon = guild?.icon;
   if (typeof icon === 'string' && icon.startsWith('http')) {
-    return <img src={icon} alt={`${guild?.name ?? 'Guild'} icon`} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />;
+    return (
+      <img
+        src={icon}
+        alt={`${guild?.name ?? 'Guild'} icon`}
+        style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: 12 }}
+      />
+    );
   }
   const fallback = typeof icon === 'string' ? icon : '🛰️';
   return (
@@ -100,8 +106,8 @@ export default function ServerPickerPage({ sessionUser }) {
               display: 'flex',
               flexWrap: 'wrap',
               justifyContent: 'center',
-              gap: '18px 28px',
-              maxWidth: 700,
+              gap: '18px 20px',
+              maxWidth: 900,
             }}
           >
             {sortedGuilds.map((guild) => (
@@ -111,16 +117,16 @@ export default function ServerPickerPage({ sessionUser }) {
                   className={`server-card${guild.id === selectedGuildId ? ' active' : ''}`}
                   onClick={() => handleSelect(guild.id)}
                   style={{
-                    width: 140,
-                    height: 140,
-                    borderRadius: '50%',
-                    border: guild.id === selectedGuildId ? '2px solid #8ae2ff' : '2px solid rgba(255,255,255,0.08)',
-                    background: 'linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.02))',
+                    width: 180,
+                    height: 200,
+                    borderRadius: 14,
+                    border: guild.id === selectedGuildId ? '2px solid #8ae2ff' : '1px solid rgba(255,255,255,0.08)',
+                    background: 'linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.02))',
                     display: 'flex',
                     flexDirection: 'column',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    gap: 10,
+                    gap: 12,
                     color: '#fff',
                     cursor: 'pointer',
                     transition: 'transform 180ms ease, border-color 180ms ease, box-shadow 180ms ease',
@@ -139,9 +145,9 @@ export default function ServerPickerPage({ sessionUser }) {
                     className="server-card__icon"
                     aria-hidden="true"
                     style={{
-                      width: 96,
-                      height: 96,
-                      borderRadius: '50%',
+                      width: 110,
+                      height: 110,
+                      borderRadius: 14,
                       overflow: 'hidden',
                       background: 'rgba(255,255,255,0.04)',
                       display: 'inline-flex',
@@ -152,30 +158,26 @@ export default function ServerPickerPage({ sessionUser }) {
                   >
                     {renderGuildIcon(guild)}
                   </span>
-                  <span className="server-card__meta" style={{ textAlign: 'center', maxWidth: 160 }}>
+                  <span className="server-card__meta" style={{ textAlign: 'center', maxWidth: 180 }}>
                     <strong style={{ display: 'block', fontSize: 15 }}>{guild.name}</strong>
-                    <span style={{ display: 'block', fontSize: 12, opacity: 0.7 }}>
+                    <span style={{ display: 'block', fontSize: 12, opacity: 0.8, marginTop: 2 }}>
                       {guild.memberCount ? `${guild.memberCount.toLocaleString()} members` : 'Member count unavailable'}
                     </span>
-                  </span>
-                  {guild.premium && (
                     <span
-                      className="pill"
                       style={{
-                        position: 'absolute',
-                        top: 12,
-                        right: 12,
-                        background: '#6ce4a5',
-                        color: '#0c1b12',
+                        display: 'inline-block',
+                        marginTop: 6,
                         padding: '2px 8px',
                         borderRadius: 999,
+                        background: 'rgba(255,255,255,0.08)',
                         fontSize: 11,
-                        fontWeight: 700,
+                        letterSpacing: 0.3,
+                        textTransform: 'uppercase',
                       }}
                     >
-                      Premium
+                      {guild.plan || 'Free'}
                     </span>
-                  )}
+                  </span>
                 </button>
               </li>
             ))}
