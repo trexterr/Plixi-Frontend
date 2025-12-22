@@ -171,7 +171,7 @@ function App() {
 
         const { data: memberships, error: membershipError } = await supabase
           .from('user_guilds')
-          .select('id, guild_id')
+          .select('guild_id')
           .eq('user_id', discordId)
           .eq('can_manage', true);
 
