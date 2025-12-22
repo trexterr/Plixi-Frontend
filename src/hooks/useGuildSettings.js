@@ -21,7 +21,7 @@ export default function useGuildSettings() {
       await saveSection('guild');
       showToast(message);
     } catch (error) {
-      console.error('Failed to save guild settings', error);
+      console.error('Failed to save guild settings', error?.causes ?? error);
       showToast('Failed to save guild settings', 'error');
     }
   };

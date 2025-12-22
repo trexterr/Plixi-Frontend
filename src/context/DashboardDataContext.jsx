@@ -198,6 +198,11 @@ export function DashboardDataProvider({ children }) {
           const remoteData = await fetchGuildSettingsFromSupabase(guild.id);
           if (remoteData) {
             dispatch({ type: 'HYDRATE_GUILD', guildId: guild.id, data: remoteData });
+          } else {
+            // Seed defaults for this guild if no records exist yet.
+            const defaultGuildSettings = createGuildRecord().settings.guild;
+            await persistGuildSettingsToSupabase(guild.id, defaultGuildSettings);
+            dispatch({ type: 'HYDRATE_GUILD', guildId: guild.id, data: defaultGuildSettings });
           }
         } catch (error) {
           console.error('Failed to hydrate guild settings', error);

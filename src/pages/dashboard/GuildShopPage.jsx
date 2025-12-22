@@ -177,7 +177,6 @@ export default function GuildShopPage() {
       setIsSaving(true);
       const payload = {
         guild_id: selectedGuild.id,
-        enabled: serverShop.enabled ?? true,
         name: serverShop.name ?? 'Serverwide Shop',
         description: serverShop.description ?? '',
         layout: serverShop.layout ?? 'grid',
