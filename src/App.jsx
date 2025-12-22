@@ -130,7 +130,7 @@ function App() {
 
         const { data: profile, error: profileError } = await supabase
           .from('users_web')
-          .select('discord_id::text')
+          .select('discord_id_text:discord_id::text')
           .eq('id', sessionUser.id)
           .maybeSingle();
 
@@ -138,8 +138,7 @@ function App() {
           console.error('[guilds] Failed to load profile discord_id', profileError);
         }
 
-        const discordIdField = profile ? profile['discord_id::text'] : null;
-        const discordId = discordIdField !== null && discordIdField !== undefined ? String(discordIdField) : null;
+        const discordId = profile?.discord_id_text ?? null;
 
         if (!discordId) {
           console.log('[guilds] No discord_id linked to this user in users_web');
@@ -147,12 +146,19 @@ function App() {
           return;
         }
 
-        console.log('[guilds] Using discordId', discordId);
+        const discordIdNumber = Number(discordId);
+        if (!Number.isFinite(discordIdNumber)) {
+          console.log('[guilds] Discord ID is not numeric', discordId);
+          setGuilds([]);
+          return;
+        }
+
+        console.log('[guilds] Using discordId', discordIdNumber);
 
         const { data: memberships, error: membershipError } = await supabase
           .from('user_guilds')
           .select('guild_id')
-          .eq('user_id', discordId)
+          .eq('user_id', discordIdNumber)
           .eq('can_manage', true);
 
         if (membershipError) throw membershipError;
@@ -235,7 +241,9 @@ function App() {
           metadata.sub ||
           null;
 
-        const normalizedDiscordId = rawDiscordId ? String(rawDiscordId) : null;
+        const discordIdNumber = rawDiscordId ? Number(rawDiscordId) : null;
+        const normalizedDiscordId =
+          discordIdNumber !== null && Number.isFinite(discordIdNumber) ? discordIdNumber : null;
 
         const username =
           metadata.full_name ||
