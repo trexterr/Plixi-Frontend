@@ -7,6 +7,7 @@ import NumberInput from '../../components/NumberInput';
 import SliderInput from '../../components/SliderInput';
 import useGuildSettings from '../../hooks/useGuildSettings';
 import { useToast } from '../../components/ToastProvider';
+import { supabase } from '../../lib/supabase';
 
 const ANIMATION_BACKGROUNDS = [
   { key: 'still', label: 'Still artwork' },
@@ -32,6 +33,7 @@ const deepClone = (value) => JSON.parse(JSON.stringify(value ?? {}));
 
 const normalizeItem = (item = {}) => ({
   id: item.id ?? createId('box-item'),
+  itemId: item.itemId ?? item.item_id ?? null,
   name: item.name ?? 'Mystery drop',
   odds: typeof item.odds === 'number' ? item.odds : 0,
   quantity: typeof item.quantity === 'number' ? item.quantity : 1,
@@ -121,6 +123,49 @@ export default function GuildBoxesPage() {
   const [boxBattlesDraft, setBoxBattlesDraft] = useState(() => ({ ...guildBoxBattles }));
   const [selectedBoxId, setSelectedBoxId] = useState(() => guildBoxes.collection[0]?.id ?? null);
   const [editingBoxId, setEditingBoxId] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [loadingContents, setLoadingContents] = useState(false);
+
+  const mapBoxRows = (rows) => {
+    if (!Array.isArray(rows)) return [];
+    return rows.map((row) =>
+      normalizeBox({
+        id: row.box_id ? String(row.box_id) : createId('box'),
+        name: row.name,
+        color: row.color,
+        price: typeof row.price === 'number' ? row.price : Number(row.price ?? 0),
+        forSale: Boolean(row.for_sale),
+        items: [],
+      }),
+    );
+  };
+
+  const mapContents = (rows, boxes) => {
+    if (!Array.isArray(rows)) return boxes;
+    const itemLookup = new Map((guild.items?.catalog ?? []).map((itm) => [String(itm.id), itm]));
+    const byBox = rows.reduce((acc, row) => {
+      const bid = row.box_id ? String(row.box_id) : null;
+      if (!bid) return acc;
+      if (!acc[bid]) acc[bid] = [];
+      const linkedItem = itemLookup.get(String(row.item_id)) ?? null;
+      acc[bid].push(
+        normalizeItem({
+          id: row.box_contents_id ? String(row.box_contents_id) : createId('box-item'),
+          itemId: row.item_id ? String(row.item_id) : null,
+          name: linkedItem?.name ?? `Item ${row.item_id ?? ''}`.trim(),
+          rarity: linkedItem?.rarity ?? 'Common',
+          odds: coerceNumber(row.odds, 0),
+          quantity: 1,
+        }),
+      );
+      return acc;
+    }, {});
+
+    return boxes.map((box) => ({
+      ...box,
+      items: byBox[box.id] ? byBox[box.id] : [],
+    }));
+  };
 
   useEffect(() => {
     setBoxesDraft(deepClone(guildBoxes));
@@ -145,6 +190,56 @@ export default function GuildBoxesPage() {
       setEditingBoxId(null);
     }
   }, [boxesDraft.collection, editingBoxId]);
+
+  useEffect(() => {
+    const loadBoxes = async () => {
+      if (!selectedGuild?.id) return;
+      setLoading(true);
+      try {
+        const { data: boxRows, error: boxError } = await supabase
+          .from('boxes')
+          .select('box_id, name, price, color, for_sale')
+          .eq('guild_id', selectedGuild.id);
+        if (boxError) throw boxError;
+
+        const mappedBoxes = mapBoxRows(boxRows);
+        let mergedBoxes = mappedBoxes;
+
+        if (mappedBoxes.length) {
+          const boxIds = mappedBoxes.map((b) => b.id);
+          setLoadingContents(true);
+          const { data: contentsRows, error: contentsError } = await supabase
+            .from('box_contents')
+            .select('box_contents_id, box_id, item_id, odds')
+            .in('box_id', boxIds);
+          if (contentsError) throw contentsError;
+          mergedBoxes = mapContents(contentsRows, mappedBoxes);
+        }
+
+        setBoxesDraft((prev) => ({
+          ...deepClone(guildBoxes),
+          collection: mergedBoxes,
+        }));
+        updateGuild((prev) => ({
+          ...prev,
+          boxes: {
+            ...prev.boxes,
+            collection: mergedBoxes,
+          },
+        }));
+        setSelectedBoxId((current) =>
+          mergedBoxes.length ? (mergedBoxes.some((b) => b.id === current) ? current : mergedBoxes[0].id) : null,
+        );
+      } catch (error) {
+        console.error('Failed to load boxes', error);
+      } finally {
+        setLoading(false);
+        setLoadingContents(false);
+      }
+    };
+
+    loadBoxes();
+  }, [selectedGuild?.id, guildBoxes, guild.items?.catalog, updateGuild]);
 
   const prevLocationKeyRef = useRef(location.key);
 
@@ -195,10 +290,10 @@ export default function GuildBoxesPage() {
   const hasBlockingIssue = editingBox ? Boolean(editingIssue) : Object.keys(boxIssues).length > 0;
 
   const hasUnsavedChanges = useMemo(() => {
-    const baseChanged = JSON.stringify(boxesDraft) !== JSON.stringify(guildBoxes);
+    const behaviorChanged = JSON.stringify(boxesDraft.behavior) !== JSON.stringify(guildBoxes.behavior);
     const battleChanged = JSON.stringify(boxBattlesDraft) !== JSON.stringify(guildBoxBattles);
-    return baseChanged || battleChanged;
-  }, [boxesDraft, guildBoxes, boxBattlesDraft, guildBoxBattles]);
+    return behaviorChanged || battleChanged;
+  }, [boxesDraft.behavior, guildBoxes.behavior, boxBattlesDraft, guildBoxBattles]);
 
   const updateBehavior = (patch) => {
     setBoxesDraft((prev) => ({ ...prev, behavior: { ...prev.behavior, ...patch } }));
@@ -209,51 +304,104 @@ export default function GuildBoxesPage() {
       ...prev,
       collection: prev.collection.map((box) => (box.id === boxId ? { ...box, ...patch } : box)),
     }));
+    if (!selectedGuild?.id) return;
+    const updatePayload = {};
+    if (patch.name !== undefined) updatePayload.name = patch.name;
+    if (patch.color !== undefined) updatePayload.color = patch.color;
+    if (patch.price !== undefined) updatePayload.price = patch.price;
+    if (patch.forSale !== undefined) updatePayload.for_sale = patch.forSale;
+    if (Object.keys(updatePayload).length) {
+      supabase.from('boxes').update(updatePayload).eq('guild_id', selectedGuild.id).eq('box_id', boxId).then(({ error }) => {
+        if (error) console.error('Failed to update box', error);
+      });
+    }
   };
 
   const addBox = () => {
-    const newBox = {
-      id: createId('box'),
-      name: 'New box',
-      color: '#7c3aed',
-      price: 0,
-      forSale: true,
-      items: [],
-    };
-
-    setBoxesDraft((prev) => ({ ...prev, collection: [...prev.collection, newBox] }));
-    setSelectedBoxId(newBox.id);
-    setEditingBoxId(null);
+    if (!selectedGuild?.id) return;
+    (async () => {
+      try {
+        const { data, error } = await supabase
+          .from('boxes')
+          .insert({
+            guild_id: selectedGuild.id,
+            name: 'New box',
+            color: '#7c3aed',
+            price: 0,
+            for_sale: true,
+          })
+          .select('box_id, name, color, price, for_sale')
+          .single();
+        if (error) throw error;
+        const newBox = normalizeBox({
+          id: data?.box_id ? String(data.box_id) : createId('box'),
+          name: data?.name ?? 'New box',
+          color: data?.color ?? '#7c3aed',
+          price: data?.price ?? 0,
+          forSale: Boolean(data?.for_sale ?? true),
+          items: [],
+        });
+        setBoxesDraft((prev) => ({ ...prev, collection: [...prev.collection, newBox] }));
+        setSelectedBoxId(newBox.id);
+        setEditingBoxId(null);
+      } catch (error) {
+        console.error('Failed to create box', error);
+      }
+    })();
   };
 
   const removeBox = (boxId) => {
-    setBoxesDraft((prev) => ({
-      ...prev,
-      collection: prev.collection.filter((box) => box.id !== boxId),
-    }));
-    if (selectedBoxId === boxId) {
-      setSelectedBoxId(null);
-    }
-    if (editingBoxId === boxId) {
-      setEditingBoxId(null);
-    }
+    if (!selectedGuild?.id) return;
+    (async () => {
+      try {
+        await supabase.from('box_contents').delete().eq('box_id', boxId);
+        await supabase.from('boxes').delete().eq('guild_id', selectedGuild.id).eq('box_id', boxId);
+        setBoxesDraft((prev) => ({
+          ...prev,
+          collection: prev.collection.filter((box) => box.id !== boxId),
+        }));
+        if (selectedBoxId === boxId) setSelectedBoxId(null);
+        if (editingBoxId === boxId) setEditingBoxId(null);
+      } catch (error) {
+        console.error('Failed to delete box', error);
+      }
+    })();
   };
 
   const addBoxItem = (boxId) => {
-    const nextItem = {
-      id: createId('box-item'),
-      name: 'Mystery drop',
-      odds: 1,
-      quantity: 1,
-      rarity: 'Common',
-    };
-
-    setBoxesDraft((prev) => ({
-      ...prev,
-      collection: prev.collection.map((box) =>
-        box.id === boxId ? { ...box, items: [...box.items, nextItem] } : box,
-      ),
-    }));
+    if (!selectedGuild?.id) return;
+    const firstItem = (guild.items?.catalog ?? [])[0];
+    if (!firstItem) return;
+    (async () => {
+      try {
+        const { data, error } = await supabase
+          .from('box_contents')
+          .insert({
+            box_id: boxId,
+            item_id: firstItem.id,
+            odds: 1,
+          })
+          .select('box_contents_id, item_id, odds')
+          .single();
+        if (error) throw error;
+        const nextItem = normalizeItem({
+          id: data?.box_contents_id ? String(data.box_contents_id) : createId('box-item'),
+          itemId: data?.item_id ? String(data.item_id) : String(firstItem.id),
+          name: firstItem.name ?? 'Mystery drop',
+          odds: coerceNumber(data?.odds, 1),
+          quantity: 1,
+          rarity: firstItem.rarity ?? 'Common',
+        });
+        setBoxesDraft((prev) => ({
+          ...prev,
+          collection: prev.collection.map((box) =>
+            box.id === boxId ? { ...box, items: [...box.items, nextItem] } : box,
+          ),
+        }));
+      } catch (error) {
+        console.error('Failed to add box item', error);
+      }
+    })();
   };
 
   const updateBoxItem = (boxId, itemId, patch) => {
@@ -265,6 +413,14 @@ export default function GuildBoxesPage() {
           : box,
       ),
     }));
+    const updatePayload = {};
+    if (patch.itemId !== undefined) updatePayload.item_id = patch.itemId;
+    if (patch.odds !== undefined) updatePayload.odds = patch.odds;
+    if (Object.keys(updatePayload).length) {
+      supabase.from('box_contents').update(updatePayload).eq('box_contents_id', itemId).then(({ error }) => {
+        if (error) console.error('Failed to update box item', error);
+      });
+    }
   };
 
   const removeBoxItem = (boxId, itemId) => {
@@ -274,6 +430,9 @@ export default function GuildBoxesPage() {
         box.id === boxId ? { ...box, items: box.items.filter((item) => item.id !== itemId) } : box,
       ),
     }));
+    supabase.from('box_contents').delete().eq('box_contents_id', itemId).then(({ error }) => {
+      if (error) console.error('Failed to delete box item', error);
+    });
   };
 
   const reorderBoxItems = (boxId) => {
@@ -292,7 +451,8 @@ export default function GuildBoxesPage() {
 
   const handleItemSelect = (boxId, itemId, nextName) => {
     const derivedRarity = itemRarityMap[nextName] ?? 'Common';
-    updateBoxItem(boxId, itemId, { name: nextName, rarity: derivedRarity });
+    const matchedItem = (guild.items?.catalog ?? []).find((itm) => itm.name === nextName) ?? null;
+    updateBoxItem(boxId, itemId, { name: nextName, rarity: derivedRarity, itemId: matchedItem?.id ?? null });
   };
 
   const enterEditor = (boxId) => {

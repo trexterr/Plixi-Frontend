@@ -1,14 +1,41 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import SectionHeader from '../../components/SectionHeader';
 import ToggleSwitch from '../../components/ToggleSwitch';
 import ModuleCard from '../../components/ModuleCard';
 import NumberInput from '../../components/NumberInput';
 import useGuildSettings from '../../hooks/useGuildSettings';
+import { supabase } from '../../lib/supabase';
+
+const computeEndsAt = (value, unit) => {
+  const now = new Date();
+  const safeValue = Number.isFinite(value) ? value : 0;
+  const multiplier = unit === 'minutes' ? 60 : unit === 'hours' ? 60 * 60 : 60 * 60 * 24;
+  const ms = safeValue * multiplier * 1000;
+  return new Date(now.getTime() + ms).toISOString();
+};
+
+const formatTimeRemaining = (endsAt) => {
+  if (!endsAt) return 'No timer';
+  const end = new Date(endsAt).getTime();
+  const now = Date.now();
+  const diff = Math.max(0, end - now);
+  const minutes = Math.floor(diff / (1000 * 60));
+  if (minutes <= 0) return 'Ended';
+  if (minutes < 60) return `${minutes}m`;
+  const hours = Math.floor(minutes / 60);
+  const remainingMinutes = minutes % 60;
+  if (hours < 24) return `${hours}h ${remainingMinutes}m`;
+  const days = Math.floor(hours / 24);
+  const remainingHours = hours % 24;
+  return `${days}d ${remainingHours}h`;
+};
 
 export default function GuildRafflesPage() {
   const location = useLocation();
   const { guild, updateGuild, saveGuild, selectedGuild, lastSaved } = useGuildSettings();
+  const [activeRaffles, setActiveRaffles] = useState([]);
+  const [loadingRaffles, setLoadingRaffles] = useState(false);
   const [selectedRaffleId, setSelectedRaffleId] = useState(null);
   const [newRaffle, setNewRaffle] = useState(() => ({
     name: '',
@@ -19,61 +46,6 @@ export default function GuildRafflesPage() {
     durationUnit: 'days',
   }));
   const rafflesEnabled = guild.raffles.enabled !== false;
-  const activeRaffles =
-    !rafflesEnabled
-      ? []
-      : Array.isArray(guild.raffles.active) && guild.raffles.active.length
-        ? guild.raffles.active
-        : [
-            {
-              id: 'raffle-1',
-              name: 'Nebula Core',
-              ticketsSold: 120,
-              closesIn: '6h 12m',
-              creator: '@Nova',
-              price: guild.raffles.ticketPrice,
-              prize: guild.raffles.prizeName,
-              prizeQuantity: guild.raffles.prizeQuantity,
-              topBuyers: [
-                { id: 'buyer-1', name: '@CosmicWhale', tickets: 32 },
-                { id: 'buyer-2', name: '@NebulaVibes', tickets: 28 },
-                { id: 'buyer-3', name: '@AstroNova', tickets: 24 },
-                { id: 'buyer-4', name: '@StarlitPulse', tickets: 20 },
-                { id: 'buyer-5', name: '@QuantumKoi', tickets: 18 },
-                { id: 'buyer-6', name: '@LiquidAurora', tickets: 16 },
-                { id: 'buyer-7', name: '@PrismaticRay', tickets: 14 },
-                { id: 'buyer-8', name: '@OrbitRider', tickets: 12 },
-                { id: 'buyer-9', name: '@PlasmaMoth', tickets: 10 },
-                { id: 'buyer-10', name: '@VioletQuasar', tickets: 9 },
-                { id: 'buyer-11', name: '@EchoLyric', tickets: 8 },
-                { id: 'buyer-12', name: '@FrostedNova', tickets: 7 },
-                { id: 'buyer-13', name: '@GlacierByte', tickets: 6 },
-                { id: 'buyer-14', name: '@SolarVelvet', tickets: 5 },
-                { id: 'buyer-15', name: '@MidnightRift', tickets: 4 },
-                { id: 'buyer-16', name: '@PulseCascade', tickets: 3 },
-                { id: 'buyer-17', name: '@HyperBloom', tickets: 3 },
-                { id: 'buyer-18', name: '@LanternFlux', tickets: 2 },
-                { id: 'buyer-19', name: '@ZenithMuse', tickets: 2 },
-                { id: 'buyer-20', name: '@OrbitStitch', tickets: 1 },
-              ],
-            },
-            {
-              id: 'raffle-2',
-              name: 'Photon Cape',
-              ticketsSold: 45,
-              closesIn: '18h 04m',
-              creator: '@PulseOps',
-              price: guild.raffles.ticketPrice,
-              prize: 'Mystery Tokens',
-              prizeQuantity: 2,
-              topBuyers: [
-                { id: 'buyer-6', name: '@Pulse', tickets: 12 },
-                { id: 'buyer-7', name: '@Nova', tickets: 10 },
-                { id: 'buyer-8', name: '@Glow', tickets: 6 },
-                { id: 'buyer-9', name: '@Comet', tickets: 5 },
-              ],
-            },
-          ];
   const activeLimit = guild.raffles.activeLimit ?? Infinity;
   const remainingSlots = Math.max(activeLimit - activeRaffles.length, 0);
   const slotLabel =
@@ -97,6 +69,10 @@ export default function GuildRafflesPage() {
   const createRaffleDisabled = !rafflesEnabled || remainingSlots <= 0;
   const canCreateRaffle =
     rafflesEnabled && newRaffle.name.trim().length > 0 && newRaffle.prizeName.trim().length > 0;
+  const selectedRaffle = useMemo(
+    () => activeRaffles.find((raffle) => raffle.id === selectedRaffleId) ?? null,
+    [activeRaffles, selectedRaffleId],
+  );
 
   useEffect(() => {
     const prevKey = prevLocationKeyRef.current;
@@ -115,28 +91,97 @@ export default function GuildRafflesPage() {
     }));
   }, [guild.raffles.ticketPrice, guild.raffles.prizeQuantity, guild.raffles.durationDays]);
 
-  const handleCreateRaffle = () => {
-    if (!canCreateRaffle || durationInvalid) return;
-    const next = {
-      id: `raffle-${Date.now()}`,
-      name: newRaffle.name.trim(),
-      ticketsSold: 0,
-      closesIn: `${newRaffle.durationValue}${newRaffle.durationUnit === 'minutes' ? 'm' : newRaffle.durationUnit === 'hours' ? 'h' : 'd'}`,
-      creator: '@You',
-      price: newRaffle.ticketPrice,
-      prize: newRaffle.prizeName.trim(),
-      prizeQuantity: newRaffle.prizeQuantity,
-      durationUnit: newRaffle.durationUnit,
-      durationValue: newRaffle.durationValue,
-      topBuyers: [],
+  useEffect(() => {
+    let isMounted = true;
+    const loadRaffles = async () => {
+      if (!selectedGuild?.id) {
+        setActiveRaffles([]);
+        return;
+      }
+      setLoadingRaffles(true);
+      const { data, error } = await supabase
+        .from('active_raffles')
+        .select(
+          'raffle_id_text:raffle_id::text, title, ticket_price, prize_quantity, is_item, prize_item_id, currency_amount, ends_at, status, created_at',
+        )
+        .eq('guild_id', selectedGuild.id)
+        .eq('status', 'active')
+        .order('ends_at', { ascending: true });
+      if (!isMounted) return;
+      if (error) {
+        console.error('Failed to load raffles', error);
+        setActiveRaffles([]);
+        setLoadingRaffles(false);
+        return;
+      }
+      const mapped = Array.isArray(data)
+        ? data.map((row) => ({
+            id: row.raffle_id_text ?? row.raffle_id ?? `raffle-${row.title ?? ''}`,
+            name: row.title ?? 'Raffle',
+            ticketsSold: 0,
+            closesIn: row.ends_at ? formatTimeRemaining(row.ends_at) : 'No timer',
+            creator: '@You',
+            price: row.ticket_price ?? 0,
+            prize: row.prize_name ?? (row.is_item ? 'Item reward' : 'Currency reward'),
+            prizeQuantity: row.prize_quantity ?? 1,
+            endsAt: row.ends_at ?? null,
+          }))
+        : [];
+      setActiveRaffles(mapped);
+      setLoadingRaffles(false);
     };
-    updateGuild((prev) => ({
-      ...prev,
-      raffles: {
-        ...prev.raffles,
-        active: [...(Array.isArray(prev.raffles.active) ? prev.raffles.active : []), next],
-      },
-    }));
+    loadRaffles();
+    return () => {
+      isMounted = false;
+    };
+  }, [selectedGuild?.id]);
+
+  const handleCreateRaffle = async () => {
+    if (!canCreateRaffle || durationInvalid || !selectedGuild?.id) return;
+    const endsAt = computeEndsAt(newRaffle.durationValue, newRaffle.durationUnit);
+    const insertPayload = {
+      guild_id: selectedGuild.id,
+      title: newRaffle.name.trim(),
+      ticket_price: newRaffle.ticketPrice ?? 0,
+      prize_quantity: newRaffle.prizeQuantity ?? 1,
+      is_item: false,
+      prize_item_id: null,
+      currency_amount: null,
+      ends_at: endsAt,
+      status: 'active',
+    };
+
+    const { data, error } = await supabase
+      .from('active_raffles')
+      .insert(insertPayload)
+      .select(
+        'raffle_id_text:raffle_id::text, title, ticket_price, prize_quantity, is_item, prize_item_id, currency_amount, ends_at, status, created_at',
+      )
+      .maybeSingle();
+
+    if (error) {
+      console.error('Failed to create raffle', error);
+      return;
+    }
+
+    const inserted = data
+      ? {
+          id: data.raffle_id_text ?? data.raffle_id ?? `raffle-${Date.now()}`,
+          name: data.title ?? insertPayload.title,
+          ticketsSold: 0,
+          closesIn: data.ends_at ? formatTimeRemaining(data.ends_at) : 'No timer',
+          creator: '@You',
+          price: data.ticket_price ?? insertPayload.ticket_price,
+          prize: newRaffle.prizeName?.trim() || (data.is_item ? 'Item reward' : 'Currency reward'),
+          prizeQuantity: data.prize_quantity ?? insertPayload.prize_quantity,
+          endsAt: data.ends_at ?? insertPayload.ends_at,
+        }
+      : null;
+
+    if (inserted) {
+      setActiveRaffles((prev) => [inserted, ...prev]);
+    }
+
     setNewRaffle({
       name: '',
       ticketPrice: guild.raffles.ticketPrice ?? 0,
@@ -146,6 +191,8 @@ export default function GuildRafflesPage() {
       durationUnit: newRaffle.durationUnit,
     });
   };
+
+  const activeRaffleList = rafflesEnabled ? activeRaffles : [];
 
   if (selectedRaffle) {
     return (
@@ -237,15 +284,17 @@ export default function GuildRafflesPage() {
           description="Live events members can join right now."
           status={
             rafflesEnabled
-              ? `${activeRaffles.length}/${activeLimit === Infinity ? '∞' : activeLimit} live`
+              ? `${activeRaffleList.length}/${activeLimit === Infinity ? '∞' : activeLimit} live`
               : 'Disabled'
           }
         >
           {!rafflesEnabled ? (
             <p className="helper-text">Raffles are disabled. Enable them to view live events.</p>
-          ) : activeRaffles.length ? (
+          ) : loadingRaffles ? (
+            <p className="helper-text">Loading raffles…</p>
+          ) : activeRaffleList.length ? (
             <ul className="raffle-summary">
-              {activeRaffles.map((raffle) => (
+              {activeRaffleList.map((raffle) => (
                 <li key={raffle.id}>
                   <div className="raffle-summary__header">
                     <div className="raffle-summary__title">

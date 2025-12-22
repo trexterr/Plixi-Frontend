@@ -3,6 +3,7 @@ import SectionHeader from '../../components/SectionHeader';
 import ModuleCard from '../../components/ModuleCard';
 import NumberInput from '../../components/NumberInput';
 import useGuildSettings from '../../hooks/useGuildSettings';
+import { supabase } from '../../lib/supabase';
 
 const SLOT_BATCH_SIZE = 8;
 const DAY_RAIL_INITIAL_SPAN = 60;
@@ -61,11 +62,13 @@ export default function GuildShopPage() {
   const [expandedSlotId, setExpandedSlotId] = useState(null);
   const [activeEditor, setActiveEditor] = useState(null);
   const [isAppearancePreviewing, setIsAppearancePreviewing] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
   const todayIso = useMemo(() => toISODateString(new Date()), []);
   const tomorrowIso = useMemo(() => shiftISODate(todayIso, 1), [todayIso]);
   const [dayRailDates, setDayRailDates] = useState(() => createDayRange(todayIso, DAY_RAIL_INITIAL_SPAN));
   const dayRailRef = useRef(null);
   const dayButtonRefs = useRef({});
+  const saveTimerRef = useRef(null);
   const extendDayRailForward = useCallback(() => {
     setDayRailDates((prev) => {
       if (!prev.length) return prev;
@@ -164,6 +167,46 @@ export default function GuildShopPage() {
     if (!selectedDate) return null;
     return schedule.find((day) => day.date === selectedDate) ?? null;
   }, [schedule, selectedDate]);
+
+  useEffect(() => {
+    if (!selectedGuild?.id) return undefined;
+    if (saveTimerRef.current) {
+      clearTimeout(saveTimerRef.current);
+    }
+    saveTimerRef.current = setTimeout(async () => {
+      setIsSaving(true);
+      const payload = {
+        guild_id: selectedGuild.id,
+        enabled: serverShop.enabled ?? true,
+        name: serverShop.name ?? 'Serverwide Shop',
+        description: serverShop.description ?? '',
+        layout: serverShop.layout ?? 'grid',
+        color: serverShop.accentColor ?? '#0ea5e9',
+        background: serverShop.backgroundStyle ?? 'default',
+        mode: serverShop.itemMode ?? 'randomized',
+      };
+      const { error } = await supabase.from('serverwide_shop').upsert(payload, { onConflict: 'guild_id' });
+      if (error) {
+        console.error('Failed to save serverwide shop', error);
+      }
+      setIsSaving(false);
+    }, 500);
+
+    return () => {
+      if (saveTimerRef.current) {
+        clearTimeout(saveTimerRef.current);
+      }
+    };
+  }, [
+    selectedGuild?.id,
+    serverShop.enabled,
+    serverShop.name,
+    serverShop.description,
+    serverShop.layout,
+    serverShop.accentColor,
+    serverShop.backgroundStyle,
+    serverShop.itemMode,
+  ]);
 
   const previewEntries = serverShop.itemMode === 'scheduled' ? currentScheduleDay?.slots ?? [] : randomizedPool;
 
@@ -696,7 +739,7 @@ export default function GuildShopPage() {
       <div className="page-actions">
         <div>
           <span>Last saved</span>
-          <strong>{lastSaved ? new Date(lastSaved).toLocaleString() : 'Not yet saved'}</strong>
+          <strong>{isSaving ? 'Saving…' : lastSaved ? new Date(lastSaved).toLocaleString() : 'Not yet saved'}</strong>
         </div>
         <button type="button" className="primary-btn" onClick={() => saveGuild('Server shop saved')}>
           Save changes

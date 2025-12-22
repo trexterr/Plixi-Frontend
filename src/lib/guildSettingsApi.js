@@ -1,11 +1,5 @@
 import { supabase } from './supabase';
 
-const GUILD_ID_OVERRIDES = {
-  'guild-starlance': 1371982928380301372n,
-  'guild-synth': 1371982928380301373n,
-  'guild-harbor': 1371982928380301374n,
-};
-
 const normalizeBoolean = (value, fallback = false) => {
   if (typeof value === 'boolean') return value;
   if (typeof value === 'number') return value !== 0;
@@ -61,17 +55,7 @@ const coerceNumber = (value, fallback = 0) => {
   return Number.isFinite(parsed) ? parsed : fallback;
 };
 
-export const deriveGuildNumericId = (guildId) => {
-  if (!guildId) return null;
-  if (GUILD_ID_OVERRIDES[guildId] !== undefined) {
-    return Number(GUILD_ID_OVERRIDES[guildId]);
-  }
-  let hash = 0;
-  for (let i = 0; i < guildId.length; i += 1) {
-    hash = (hash * 31 + guildId.charCodeAt(i)) % 1000000000000;
-  }
-  return hash || 1;
-};
+export const deriveGuildNumericId = (guildId) => (guildId ? String(guildId) : null);
 
 const mapCurrencyRow = (row) =>
   !row
@@ -84,18 +68,16 @@ const mapCurrencyRow = (row) =>
         },
       };
 
-const mapDailyRow = (row) =>
+const mapBoxSettingsRow = (row) =>
   !row
     ? null
     : {
-        daily: {
-          enabled: normalizeBoolean(row.enabled, true),
-          baseAmount: coerceNumber(row.base_amount, 200),
-          cooldownHours: Math.max(1, Math.round((parseDurationToMinutes(row.cooldown) ?? 1440) / 60)),
-          roleAmounts: Array.isArray(row.role_bonuses) ? row.role_bonuses : [],
-          streak: {
-            enabled: normalizeBoolean(row.streak_enabled),
-            profile: row.streak_profile ?? 'standard',
+        boxes: {
+          behavior: {
+            enabled: normalizeBoolean(row.enabled, true),
+            animationSpeed: row.animation_speed ?? 'standard',
+            announceRare: normalizeBoolean(row.announce_rare_openings, false),
+            openOnPurchase: normalizeBoolean(row.open_on_purchase, false),
           },
         },
       };
@@ -176,13 +158,21 @@ const mapRaffleRow = (row) =>
     : {
         raffles: {
           enabled: normalizeBoolean(row.enabled, true),
-          animationSpeed: row.animation_speed ?? 'standard',
-          announceRare: normalizeBoolean(row.announce_rarities, false),
-          announceChannel: row.announcement ?? null,
-          announceBy: row.announce_by ?? null,
-          minRarity: row.min_rarity ?? null,
-          prizePoolPercent: coerceNumber(row.max_odds, 0),
-          openOnPurchase: normalizeBoolean(row.open_on_purchase, false),
+        },
+      };
+
+const mapServerShopRow = (row) =>
+  !row
+    ? null
+    : {
+        serverShop: {
+          enabled: normalizeBoolean(row.enabled, true),
+          name: row.name ?? 'Serverwide Shop',
+          description: row.description ?? '',
+          layout: row.layout ?? 'grid',
+          accentColor: row.color ?? '#0ea5e9',
+          backgroundStyle: row.background ?? 'default',
+          itemMode: row.mode ?? 'randomized',
         },
       };
 
@@ -192,36 +182,39 @@ export async function fetchGuildSettingsFromSupabase(guildId) {
 
   const requests = await Promise.allSettled([
     supabase.from('currency_settings').select('*').eq('guild_id', numericId).maybeSingle(),
-    supabase.from('daily_collect_settings').select('*').eq('guild_id', numericId).maybeSingle(),
+    supabase.from('box_settings').select('*').eq('guild_id', numericId).maybeSingle(),
     supabase.from('work_command_settings').select('*').eq('guild_id', numericId).maybeSingle(),
     supabase.from('marketplace_settings').select('*').eq('guild_id', numericId).maybeSingle(),
     supabase.from('auction_settings').select('*').eq('guild_id', numericId).maybeSingle(),
     supabase.from('trades_gifts_settings').select('*').eq('guild_id', numericId).maybeSingle(),
     supabase.from('item_settings').select('*').eq('guild_id', numericId).maybeSingle(),
     supabase.from('raffle_settings').select('*').eq('guild_id', numericId).maybeSingle(),
+    supabase.from('serverwide_shop').select('*').eq('guild_id', numericId).maybeSingle(),
   ]);
 
   const [
     currencyResult,
-    dailyResult,
+    boxSettingsResult,
     workResult,
     marketplaceResult,
     auctionResult,
     tradesResult,
     itemResult,
     raffleResult,
+    serverShopResult,
   ] = requests.map((result) => (result.status === 'fulfilled' ? result.value : { data: null, error: result.reason }));
 
   const aggregate = {};
 
   if (currencyResult?.data) Object.assign(aggregate, mapCurrencyRow(currencyResult.data));
-  if (dailyResult?.data) Object.assign(aggregate, mapDailyRow(dailyResult.data));
+  if (boxSettingsResult?.data) Object.assign(aggregate, mapBoxSettingsRow(boxSettingsResult.data));
   if (workResult?.data) Object.assign(aggregate, mapWorkRow(workResult.data));
   if (marketplaceResult?.data) Object.assign(aggregate, mapMarketplaceRow(marketplaceResult.data));
   if (auctionResult?.data) Object.assign(aggregate, mapAuctionRow(auctionResult.data));
   if (tradesResult?.data) Object.assign(aggregate, mapTradesRow(tradesResult.data));
   if (itemResult?.data) Object.assign(aggregate, mapItemRow(itemResult.data));
   if (raffleResult?.data) Object.assign(aggregate, mapRaffleRow(raffleResult.data));
+  if (serverShopResult?.data) Object.assign(aggregate, mapServerShopRow(serverShopResult.data));
 
   return aggregate;
 }
@@ -257,15 +250,13 @@ export async function persistGuildSettingsToSupabase(guildId, guildSettings) {
       },
       { onConflict: 'guild_id' },
     ),
-    supabase.from('daily_collect_settings').upsert(
+    supabase.from('box_settings').upsert(
       {
         guild_id: numericId,
-        enabled: Boolean(guildSettings.daily?.enabled),
-        base_amount: guildSettings.daily?.baseAmount ?? 0,
-        cooldown: formatHours(guildSettings.daily?.cooldownHours ?? 24),
-        streak_enabled: Boolean(guildSettings.daily?.streak?.enabled),
-        streak_profile: guildSettings.daily?.streak?.profile ?? 'standard',
-        role_bonuses: safeRoleBonuses(guildSettings.daily?.roleAmounts),
+        enabled: Boolean(guildSettings.boxes?.behavior?.enabled ?? guildSettings.boxes?.enabled),
+        animation_speed: guildSettings.boxes?.behavior?.animationSpeed ?? 'standard',
+        announce_rare_openings: Boolean(guildSettings.boxes?.behavior?.announceRare),
+        open_on_purchase: Boolean(guildSettings.boxes?.behavior?.openOnPurchase),
       },
       { onConflict: 'guild_id' },
     ),
@@ -324,16 +315,20 @@ export async function persistGuildSettingsToSupabase(guildId, guildSettings) {
     supabase.from('raffle_settings').upsert(
       {
         guild_id: numericId,
-        enabled: Boolean(guildSettings.raffles?.rafflesEnabled ?? guildSettings.raffles?.enabled),
-        animation_speed: guildSettings.boxes?.behavior?.animationSpeed ?? 'standard',
-        announce_rarities: Boolean(guildSettings.boxes?.behavior?.announceRare),
-        announcement: guildSettings.boxes?.behavior?.announceChannel ?? null,
-        announce_by: guildSettings.boxes?.behavior?.announceBy ?? null,
-        min_rarity: guildSettings.boxes?.behavior?.minRarity ?? null,
-        max_odds: guildSettings.boxes?.behavior?.maxOdds ?? null,
-        open_on_purchase: Boolean(
-          guildSettings.boxes?.behavior?.openOnPurchase ?? guildSettings.raffles?.openOnPurchase,
-        ),
+        enabled: Boolean(guildSettings.raffles?.enabled),
+      },
+      { onConflict: 'guild_id' },
+    ),
+    supabase.from('serverwide_shop').upsert(
+      {
+        guild_id: numericId,
+        enabled: Boolean(guildSettings.serverShop?.enabled ?? true),
+        name: guildSettings.serverShop?.name ?? 'Serverwide Shop',
+        description: guildSettings.serverShop?.description ?? '',
+        layout: guildSettings.serverShop?.layout ?? 'grid',
+        color: guildSettings.serverShop?.accentColor ?? '#0ea5e9',
+        background: guildSettings.serverShop?.backgroundStyle ?? 'default',
+        mode: guildSettings.serverShop?.itemMode ?? 'randomized',
       },
       { onConflict: 'guild_id' },
     ),

@@ -5,11 +5,7 @@ import NumberInput from '../../components/NumberInput';
 import ModuleCard from '../../components/ModuleCard';
 import useGuildSettings from '../../hooks/useGuildSettings';
 import { DEFAULT_SETTINGS } from '../../data';
-
-const SAMPLE_ITEMS = DEFAULT_SETTINGS.guild.items.catalog.map((item, index) => ({
-  ...item,
-  id: `sample-item-${index + 1}`,
-}));
+import { supabase } from '../../lib/supabase';
 
 export default function GuildItemsPage() {
   const { guild, updateGuild, saveGuild, selectedGuild, lastSaved } = useGuildSettings();
@@ -19,17 +15,44 @@ export default function GuildItemsPage() {
   const [pinnedItemId, setPinnedItemId] = useState(null);
   const [isCreating, setIsCreating] = useState(false);
   const [draftItem, setDraftItem] = useState(null);
+  const [loadingItems, setLoadingItems] = useState(false);
 
   useEffect(() => {
-    if (guild.items.catalog.length) return;
-    updateGuild((prev) => ({
-      ...prev,
-      items: {
-        ...prev.items,
-        catalog: SAMPLE_ITEMS.map((item) => ({ ...item })),
-      },
-    }));
-  }, [guild.items.catalog.length, updateGuild]);
+    const loadItems = async () => {
+      if (!selectedGuild?.id) return;
+      setLoadingItems(true);
+      try {
+        const { data, error } = await supabase
+          .from('server_items')
+          .select('item_id, name, description, rarity, price')
+          .eq('guild_id', selectedGuild.id);
+        if (error) throw error;
+        const items = Array.isArray(data)
+          ? data.map((row) => ({
+              id: String(row.item_id),
+              name: row.name ?? 'Untitled item',
+              description: row.description ?? '',
+              rarity: row.rarity ?? 'Common',
+              price: row.price ?? null,
+              image: '',
+              stock: 0,
+            }))
+          : [];
+        updateGuild((prev) => ({
+          ...prev,
+          items: {
+            ...prev.items,
+            catalog: items,
+          },
+        }));
+      } catch (error) {
+        console.error('Failed to load items', error);
+      } finally {
+        setLoadingItems(false);
+      }
+    };
+    loadItems();
+  }, [selectedGuild?.id, updateGuild]);
 
   const beginNewItem = () => {
     const newItem = { id: `item-${Date.now()}`, name: 'New item', rarity: 'Common', image: '', stock: 0 };
@@ -65,31 +88,79 @@ export default function GuildItemsPage() {
     }));
   };
 
+  const persistItemUpdate = async (id, patch) => {
+    if (!selectedGuild?.id || !id) return;
+    const updatePayload = {};
+    if (patch.name !== undefined) updatePayload.name = patch.name;
+    if (patch.rarity !== undefined) updatePayload.rarity = patch.rarity;
+    if (patch.description !== undefined) updatePayload.description = patch.description;
+    if (patch.price !== undefined) updatePayload.price = patch.price;
+
+    if (!Object.keys(updatePayload).length) return;
+
+    try {
+      await supabase.from('server_items').update(updatePayload).eq('guild_id', selectedGuild.id).eq('item_id', id);
+    } catch (error) {
+      console.error('Failed to update item', error);
+    }
+  };
+
   const handleItemChange = (patch) => {
     if (isCreating) {
       setDraftItem((prev) => ({ ...prev, ...patch }));
     } else if (selectedItemId) {
       updateItem(selectedItemId, patch);
+      persistItemUpdate(selectedItemId, patch);
     }
   };
 
-  const handleAddItem = () => {
+  const handleAddItem = async () => {
     if (!isCreating || !draftItem) return;
-    addItem(draftItem);
-    setIsCreating(false);
-    setDraftItem(null);
-    setSelectedItemId(draftItem.id);
+    try {
+      const { data, error } = await supabase
+        .from('server_items')
+        .insert({
+          guild_id: selectedGuild?.id,
+          name: draftItem.name,
+          description: draftItem.description ?? '',
+          rarity: draftItem.rarity ?? 'Common',
+          price: draftItem.price ?? null,
+        })
+        .select('item_id, name, description, rarity, price')
+        .single();
+      if (error) throw error;
+      const persisted = {
+        id: String(data.item_id),
+        name: data.name ?? draftItem.name,
+        description: data.description ?? '',
+        rarity: data.rarity ?? draftItem.rarity ?? 'Common',
+        price: data.price ?? draftItem.price ?? null,
+        image: draftItem.image ?? '',
+        stock: draftItem.stock ?? 0,
+      };
+      addItem(persisted);
+      setIsCreating(false);
+      setDraftItem(null);
+      setSelectedItemId(persisted.id);
+    } catch (error) {
+      console.error('Failed to create item', error);
+    }
   };
 
-  const handleDeleteItem = () => {
+  const handleDeleteItem = async () => {
     if (isCreating) {
       setIsCreating(false);
       setDraftItem(null);
       return;
     }
     if (selectedItemId) {
-      removeItem(selectedItemId);
-      setSelectedItemId(null);
+      try {
+        await supabase.from('server_items').delete().eq('guild_id', selectedGuild?.id).eq('item_id', selectedItemId);
+        removeItem(selectedItemId);
+        setSelectedItemId(null);
+      } catch (error) {
+        console.error('Failed to delete item', error);
+      }
     }
   };
 
