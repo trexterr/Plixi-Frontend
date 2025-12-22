@@ -119,6 +119,16 @@ function App() {
   useEffect(() => {
     let isMounted = true;
 
+    const extractDiscordIdFromMetadata = (user) => {
+      const metadata = user?.metadata ?? {};
+      const raw =
+        metadata.provider_id ||
+        metadata.user_id ||
+        metadata.sub ||
+        null;
+      return raw ? String(raw) : null;
+    };
+
     const fetchGuilds = async () => {
       if (!sessionUser) {
         console.log('[guilds] No session user yet');
@@ -138,7 +148,9 @@ function App() {
           console.error('[guilds] Failed to load profile discord_id', profileError);
         }
 
-        const discordId = profile?.discord_id_text ?? null;
+        const discordIdFromProfile = profile?.discord_id_text ?? null;
+        const discordIdFromMetadata = extractDiscordIdFromMetadata(sessionUser);
+        const discordId = discordIdFromMetadata || discordIdFromProfile;
 
         if (!discordId) {
           console.log('[guilds] No discord_id linked to this user in users_web');
@@ -146,12 +158,15 @@ function App() {
           return;
         }
 
-        console.log('[guilds] Using discordId', discordId);
+        console.log('[guilds] Using discordId', discordId, {
+          meta: discordIdFromMetadata,
+          profile: discordIdFromProfile,
+        });
 
         const { data: memberships, error: membershipError } = await supabase
           .from('user_guilds')
           .select('guild_id')
-          .eq('user_id', discordId)
+          .filter('user_id::text', 'eq', discordId)
           .eq('can_manage', true);
 
         if (membershipError) throw membershipError;
@@ -173,7 +188,7 @@ function App() {
         const { data: guildRows, error: guildError } = await supabase
           .from('guilds')
           .select('guild_id, name, plan, member_count, owner_id, last_updated, icon_hash')
-          .in('guild_id', guildIds);
+          .filter('guild_id::text', 'in', `(${guildIds.join(',')})`);
 
         if (guildError) throw guildError;
 
