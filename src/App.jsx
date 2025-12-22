@@ -130,7 +130,7 @@ function App() {
 
         const { data: profile, error: profileError } = await supabase
           .from('users_web')
-          .select('discord_id_text:discord_id::text')
+          .select('discord_id')
           .eq('id', sessionUser.id)
           .maybeSingle();
 
@@ -138,7 +138,7 @@ function App() {
           console.error('[guilds] Failed to load profile discord_id', profileError);
         }
 
-        const discordId = profile?.discord_id_text ?? null;
+        const discordId = profile?.discord_id ?? null;
 
         if (!discordId) {
           console.log('[guilds] No discord_id linked to this user in users_web');
@@ -150,8 +150,8 @@ function App() {
 
         const { data: memberships, error: membershipError } = await supabase
           .from('user_guilds')
-          .select('guild_id_text:guild_id::text')
-          .eq('user_id::text', discordId)
+          .select('guild_id')
+          .eq('user_id', discordId)
           .eq('can_manage', true);
 
         if (membershipError) throw membershipError;
@@ -161,7 +161,7 @@ function App() {
         const guildIds = Array.isArray(memberships)
           ? memberships
               .map((row) =>
-                row?.guild_id_text !== undefined && row.guild_id_text !== null ? String(row.guild_id_text) : null,
+                row?.guild_id !== undefined && row.guild_id !== null ? String(row.guild_id) : null,
               )
               .filter(Boolean)
           : [];
@@ -174,8 +174,8 @@ function App() {
 
         const { data: guildRows, error: guildError } = await supabase
           .from('guilds')
-          .select('guild_id_text:guild_id::text, name, plan, member_count, owner_id, last_updated, icon_hash')
-          .filter('guild_id::text', 'in', `(${guildIds.join(',')})`);
+          .select('guild_id, name, plan, member_count, owner_id, last_updated, icon_hash')
+          .in('guild_id', guildIds);
 
         if (guildError) throw guildError;
 
@@ -185,7 +185,7 @@ function App() {
           ? guildRows
               .map((row) =>
                 normalizeDiscordGuild({
-                  id: row.guild_id_text,
+                  id: row.guild_id,
                   name: row.name,
                   icon_hash: row.icon_hash,
                   premium_subscription_count: row.plan && row.plan.toLowerCase() !== 'free' ? 1 : 0,
