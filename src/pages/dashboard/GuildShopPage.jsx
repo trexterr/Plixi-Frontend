@@ -355,7 +355,6 @@ export default function GuildShopPage() {
 
   const handleAppearanceReset = () => {
     updateServerShop({
-      accentColor: '#0ea5e9',
       backgroundStyle: 'default',
       layout: 'grid',
     });
@@ -370,7 +369,7 @@ export default function GuildShopPage() {
           <p>{serverShop.description || 'Rotating curated shop.'}</p>
           <strong>{serverShop.name}</strong>
         </div>
-        <span className="shop-preview__accent" style={{ background: accentColor }}>
+        <span className="shop-preview__accent">
           {scheduled ? 'Scheduled' : 'Randomized'}
         </span>
       </header>
@@ -393,7 +392,7 @@ export default function GuildShopPage() {
                   <strong>{entryName || 'Unnamed item'}</strong>
                   <span>{meta}</span>
                 </div>
-                <span className="shop-preview__price" style={{ color: accentColor }}>
+                <span className="shop-preview__price">
                   {entry.price ? `${entry.price} credits` : 'Base price'}
                 </span>
               </li>
@@ -412,18 +411,10 @@ export default function GuildShopPage() {
     <ModuleCard
       icon="🎨"
       title="Appearance & Format"
-      description="Dial in color accents, backgrounds, and layout."
+      description="Dial in backgrounds and layout."
       status={layoutStatus}
       lockedOpen={locked}
     >
-      <label className="text-control">
-        <span>Color</span>
-        <input
-          value={serverShop.accentColor || ''}
-          placeholder="#0ea5e9"
-          onChange={(event) => updateServerShop({ accentColor: event.target.value })}
-        />
-      </label>
       <label className="text-control">
         <span>Background</span>
         <select value={serverShop.backgroundStyle || 'default'} onChange={(event) => updateServerShop({ backgroundStyle: event.target.value })}>
