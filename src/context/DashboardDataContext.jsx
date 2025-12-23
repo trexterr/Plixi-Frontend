@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useMemo, useReducer, useRef } from 'react';
+import { createContext, useContext, useEffect, useMemo, useReducer, useRef, useCallback } from 'react';
 import { DEFAULT_SETTINGS } from '../data';
 import { useSelectedGuild } from './SelectedGuildContext';
 import { fetchGuildSettingsFromSupabase, persistGuildSettingsToSupabase } from '../lib/guildSettingsApi';
@@ -141,6 +141,24 @@ const reducer = (state, action) => {
         },
       };
     }
+    case 'REVERT_GUILD': {
+      const { guildId, data } = action;
+      const guildRecord = state.records[guildId];
+      if (!guildRecord || !data) return state;
+      return {
+        ...state,
+        records: {
+          ...state.records,
+          [guildId]: {
+            ...guildRecord,
+            settings: {
+              ...guildRecord.settings,
+              guild: ensureRecordShape({ settings: { guild: data } }).settings.guild,
+            },
+          },
+        },
+      };
+    }
     default:
       return state;
   }
@@ -247,6 +265,15 @@ export function DashboardDataProvider({ children }) {
     return true;
   };
 
+  const revertGuildChanges = useCallback(
+    (guildId) => {
+      const persisted = lastPersistedGuildRef.current[guildId];
+      if (!persisted) return;
+      dispatch({ type: 'REVERT_GUILD', guildId, data: persisted });
+    },
+    [dispatch],
+  );
+
   const value = useMemo(
     () => ({
       state,
@@ -254,8 +281,9 @@ export function DashboardDataProvider({ children }) {
       updateSection,
       resetSection,
       saveSection,
+      revertGuildChanges,
     }),
-    [state, activeRecord],
+    [state, activeRecord, revertGuildChanges],
   );
 
   return <DashboardDataContext.Provider value={value}>{children}</DashboardDataContext.Provider>;

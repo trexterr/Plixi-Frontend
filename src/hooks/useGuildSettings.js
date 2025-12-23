@@ -1,12 +1,14 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo } from 'react';
+import { useLocation } from 'react-router-dom';
 import { useDashboardData } from '../context/DashboardDataContext';
 import { useSelectedGuild } from '../context/SelectedGuildContext';
 import { useToast } from '../components/ToastProvider';
 
 export default function useGuildSettings() {
-  const { activeRecord, updateSection, resetSection, saveSection } = useDashboardData();
+  const { activeRecord, updateSection, resetSection, saveSection, revertGuildChanges } = useDashboardData();
   const { selectedGuild, isPremium } = useSelectedGuild();
   const { showToast } = useToast();
+  const location = useLocation();
 
   const guild = activeRecord.settings.guild;
   const lastSaved = activeRecord.lastSaved.guild;
@@ -32,6 +34,13 @@ export default function useGuildSettings() {
     resetSection('guild');
     showToast(message, tone);
   };
+
+  useEffect(() => {
+    if (!selectedGuild?.id) return;
+    return () => {
+      revertGuildChanges(selectedGuild.id);
+    };
+  }, [location.pathname, selectedGuild?.id, revertGuildChanges]);
 
   return useMemo(
     () => ({
