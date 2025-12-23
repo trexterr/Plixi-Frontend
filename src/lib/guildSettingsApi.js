@@ -239,103 +239,143 @@ export async function persistGuildSettingsToSupabase(guildId, guildSettings) {
   const numericId = deriveGuildNumericId(guildId);
   if (!numericId || !guildSettings) return;
 
-  const payloads = [
-    supabase.from('currency_settings').upsert(
-      {
-        guild_id: numericId,
-        currency_name: guildSettings.currency?.name ?? 'Credits',
-        start_balance: guildSettings.currency?.startingBalance ?? 0,
-        decimals_enabled: Boolean(guildSettings.currency?.decimalsEnabled),
-      },
-      { onConflict: 'guild_id' },
-    ),
-    supabase.from('box_settings').upsert(
-      {
-        guild_id: numericId,
-        enabled: Boolean(guildSettings.boxes?.behavior?.enabled ?? guildSettings.boxes?.enabled),
-        animation_speed: guildSettings.boxes?.behavior?.animationSpeed ?? 'standard',
-        announce_rare_openings: Boolean(guildSettings.boxes?.behavior?.announceRare),
-        open_on_purchase: Boolean(guildSettings.boxes?.behavior?.openOnPurchase),
-      },
-      { onConflict: 'guild_id' },
-    ),
-    supabase.from('work_command_settings').upsert(
-      {
-        guild_id: numericId,
-        enabled: Boolean(guildSettings.work?.enabled),
-        cooldown: formatMinutes(guildSettings.work?.cooldownMinutes ?? 240, 'm'),
-        min_pay: guildSettings.work?.payMin ?? 0,
-        max_pay: guildSettings.work?.payMax ?? 0,
-      },
-      { onConflict: 'guild_id' },
-    ),
-    supabase.from('marketplace_settings').upsert(
-      {
-        guild_id: numericId,
-        enabled: Boolean(guildSettings.marketplaceSuite?.enabled),
-        results_per_page: guildSettings.marketplaceSuite?.resultsPerPage ?? 6,
-        fees: Boolean(guildSettings.marketplaceSuite?.feesEnabled),
-        fee_percentage: guildSettings.marketplaceSuite?.feePercent ?? 0,
-        display_title: guildSettings.marketplaceSuite?.appearance?.title ?? 'Marketplace',
-        color: guildSettings.marketplaceSuite?.appearance?.color ?? '#7c3aed',
-      },
-      { onConflict: 'guild_id' },
-    ),
-    supabase.from('auction_settings').upsert(
-      {
-        guild_id: numericId,
-        enabled: Boolean(guildSettings.marketplaceSuite?.auctions?.enabled),
-        allow_buyouts: Boolean(guildSettings.marketplaceSuite?.auctions?.buyoutsEnabled),
-        results_per_page: guildSettings.marketplaceSuite?.auctions?.resultsPerPage ?? 4,
-        fees: Boolean(guildSettings.marketplaceSuite?.auctions?.feeEnabled),
-        fee_percentage: guildSettings.marketplaceSuite?.auctions?.feePercent ?? 0,
-        display_title: guildSettings.marketplaceSuite?.auctions?.appearance?.title ?? 'Auction House',
-        color: guildSettings.marketplaceSuite?.auctions?.appearance?.color ?? '#f97316',
-      },
-      { onConflict: 'guild_id' },
-    ),
-    supabase.from('trades_gifts_settings').upsert(
-      {
-        guild_id: numericId,
-        trading_enabled: Boolean(guildSettings.marketplaceSuite?.trading?.enabled),
-        gifting_enabled: Boolean(guildSettings.marketplaceSuite?.trading?.giftingEnabled),
-      },
-      { onConflict: 'guild_id' },
-    ),
-    supabase.from('item_settings').upsert(
-      {
-        guild_id: numericId,
-        enabled: Boolean(guildSettings.items?.enabled),
-        allowed_rarities: guildSettings.items?.rarityCap ?? 0,
-      },
-      { onConflict: 'guild_id' },
-    ),
-    supabase.from('raffle_settings').upsert(
-      {
-        guild_id: numericId,
-        enabled: Boolean(guildSettings.raffles?.enabled),
-      },
-      { onConflict: 'guild_id' },
-    ),
-    supabase.from('serverwide_shop').upsert(
-      {
-        guild_id: numericId,
-        name: guildSettings.serverShop?.name ?? 'Serverwide Shop',
-        description: guildSettings.serverShop?.description ?? '',
-        layout: guildSettings.serverShop?.layout ?? 'grid',
-        color: guildSettings.serverShop?.accentColor ?? '#0ea5e9',
-        background: guildSettings.serverShop?.backgroundStyle ?? 'default',
-        mode: guildSettings.serverShop?.itemMode ?? 'randomized',
-      },
-      { onConflict: 'guild_id' },
-    ),
+  const tasks = [
+    {
+      table: 'currency_settings',
+      promise: supabase.from('currency_settings').upsert(
+        {
+          guild_id: numericId,
+          currency_name: guildSettings.currency?.name ?? 'Credits',
+          start_balance: guildSettings.currency?.startingBalance ?? 0,
+          decimals_enabled: Boolean(guildSettings.currency?.decimalsEnabled),
+        },
+        { onConflict: 'guild_id' },
+      ),
+    },
+    {
+      table: 'box_settings',
+      promise: supabase.from('box_settings').upsert(
+        {
+          guild_id: numericId,
+          enabled: Boolean(guildSettings.boxes?.behavior?.enabled ?? guildSettings.boxes?.enabled),
+          animation_speed: guildSettings.boxes?.behavior?.animationSpeed ?? 'standard',
+          announce_rare_openings: Boolean(guildSettings.boxes?.behavior?.announceRare),
+          open_on_purchase: Boolean(guildSettings.boxes?.behavior?.openOnPurchase),
+        },
+        { onConflict: 'guild_id' },
+      ),
+    },
+    {
+      table: 'work_command_settings',
+      promise: supabase.from('work_command_settings').upsert(
+        {
+          guild_id: numericId,
+          enabled: Boolean(guildSettings.work?.enabled),
+          cooldown: formatMinutes(guildSettings.work?.cooldownMinutes ?? 240, 'm'),
+          min_pay: guildSettings.work?.payMin ?? 0,
+          max_pay: guildSettings.work?.payMax ?? 0,
+        },
+        { onConflict: 'guild_id' },
+      ),
+    },
+    {
+      table: 'marketplace_settings',
+      promise: supabase.from('marketplace_settings').upsert(
+        {
+          guild_id: numericId,
+          enabled: Boolean(guildSettings.marketplaceSuite?.enabled),
+          results_per_page: guildSettings.marketplaceSuite?.resultsPerPage ?? 6,
+          fees: Boolean(guildSettings.marketplaceSuite?.feesEnabled),
+          fee_percentage: guildSettings.marketplaceSuite?.feePercent ?? 0,
+          display_title: guildSettings.marketplaceSuite?.appearance?.title ?? 'Marketplace',
+          color: guildSettings.marketplaceSuite?.appearance?.color ?? '#7c3aed',
+        },
+        { onConflict: 'guild_id' },
+      ),
+    },
+    {
+      table: 'auction_settings',
+      promise: supabase.from('auction_settings').upsert(
+        {
+          guild_id: numericId,
+          enabled: Boolean(guildSettings.marketplaceSuite?.auctions?.enabled),
+          allow_buyouts: Boolean(guildSettings.marketplaceSuite?.auctions?.buyoutsEnabled),
+          results_per_page: guildSettings.marketplaceSuite?.auctions?.resultsPerPage ?? 4,
+          fees: Boolean(guildSettings.marketplaceSuite?.auctions?.feeEnabled),
+          fee_percentage: guildSettings.marketplaceSuite?.auctions?.feePercent ?? 0,
+          display_title: guildSettings.marketplaceSuite?.auctions?.appearance?.title ?? 'Auction House',
+          color: guildSettings.marketplaceSuite?.auctions?.appearance?.color ?? '#f97316',
+        },
+        { onConflict: 'guild_id' },
+      ),
+    },
+    {
+      table: 'trades_gifts_settings',
+      promise: supabase.from('trades_gifts_settings').upsert(
+        {
+          guild_id: numericId,
+          trading_enabled: Boolean(guildSettings.marketplaceSuite?.trading?.enabled),
+          gifting_enabled: Boolean(guildSettings.marketplaceSuite?.trading?.giftingEnabled),
+        },
+        { onConflict: 'guild_id' },
+      ),
+    },
+    {
+      table: 'item_settings',
+      promise: supabase.from('item_settings').upsert(
+        {
+          guild_id: numericId,
+          enabled: Boolean(guildSettings.items?.enabled),
+          allowed_rarities: guildSettings.items?.rarityCap ?? 0,
+        },
+        { onConflict: 'guild_id' },
+      ),
+    },
+    {
+      table: 'raffle_settings',
+      promise: supabase.from('raffle_settings').upsert(
+        {
+          guild_id: numericId,
+          enabled: Boolean(guildSettings.raffles?.enabled),
+        },
+        { onConflict: 'guild_id' },
+      ),
+    },
+    {
+      table: 'serverwide_shop',
+      promise: supabase.from('serverwide_shop').upsert(
+        {
+          guild_id: numericId,
+          name: guildSettings.serverShop?.name ?? 'Serverwide Shop',
+          description: guildSettings.serverShop?.description ?? '',
+          layout: guildSettings.serverShop?.layout ?? 'grid',
+          color: guildSettings.serverShop?.accentColor ?? '#0ea5e9',
+          background: guildSettings.serverShop?.backgroundStyle ?? 'default',
+          mode: guildSettings.serverShop?.itemMode ?? 'randomized',
+        },
+        { onConflict: 'guild_id' },
+      ),
+    },
   ];
 
-  const results = await Promise.allSettled(payloads);
+  const results = await Promise.allSettled(tasks.map((task) => task.promise));
   const failed = results
-    .map((result) => (result.status === 'fulfilled' ? result.value?.error : result.reason))
+    .map((result, index) => {
+      if (result.status === 'fulfilled') return result.value?.error ? { table: tasks[index].table, error: result.value.error } : null;
+      return { table: tasks[index].table, error: result.reason };
+    })
     .filter(Boolean);
+
   if (failed.length) {
+    console.error(
+      'Failed to persist some guild settings',
+      failed.map((entry) => ({
+        table: entry.table,
+        message: entry.error?.message,
+        details: entry.error?.details,
+        hint: entry.error?.hint,
+      })),
+    );
     const aggregateError = new Error('Failed to persist some guild settings');
     aggregateError.causes = failed;
     throw aggregateError;
