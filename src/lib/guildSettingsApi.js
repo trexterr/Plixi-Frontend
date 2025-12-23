@@ -266,7 +266,6 @@ export async function persistGuildSettingsToSupabase(guildId, guildSettings) {
         cooldown: formatMinutes(guildSettings.work?.cooldownMinutes ?? 240, 'm'),
         min_pay: guildSettings.work?.payMin ?? 0,
         max_pay: guildSettings.work?.payMax ?? 0,
-        job_pool: safeJobPool(guildSettings.work?.jobs),
       },
       { onConflict: 'guild_id' },
     ),
