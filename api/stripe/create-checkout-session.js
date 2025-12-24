@@ -22,7 +22,15 @@ export default async function handler(req, res) {
     return;
   }
 
-  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || process.env.VERCEL_URL || 'http://localhost:5173';
+  const rawSiteUrl =
+    process.env.NEXT_PUBLIC_SITE_URL ||
+    process.env.VERCEL_URL ||
+    'http://localhost:5173';
+
+  // Vercel's VERCEL_URL is just the host, but Stripe needs a fully-qualified URL
+  const siteUrl = rawSiteUrl.startsWith('http')
+    ? rawSiteUrl
+    : `https://${rawSiteUrl}`;
   const successUrl = `${siteUrl}/pricing?status=success${returnTo ? `&returnTo=${encodeURIComponent(returnTo)}` : ''}`;
   const cancelUrl = `${siteUrl}/pricing?status=cancelled`;
 
