@@ -7,6 +7,7 @@ export default function PricingCard({ plan, billing, emphasized }) {
     billing === 'yearly'
       ? `$${formatCurrency(rate * 12)} first year · $${formatCurrency(afterRate * 12)} after`
       : `$${rate} first month · $${afterRate} after`;
+  const planKey = `${plan.id}_${billing}`;
 
   return (
     <article className={`pricing-card ${emphasized ? 'is-featured' : ''}`}>
@@ -27,9 +28,12 @@ export default function PricingCard({ plan, billing, emphasized }) {
           </li>
         ))}
       </ul>
-      <button className="primary-btn" type="button">
-        Get the {plan.name} plan
-      </button>
+      <form action="/api/stripe/create-checkout-session" method="POST">
+        <input type="hidden" name="planKey" value={planKey} />
+        <button className="primary-btn" type="submit">
+          Get the {plan.name} plan
+        </button>
+      </form>
     </article>
   );
 }
