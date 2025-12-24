@@ -3,6 +3,7 @@ import { useLocation } from 'react-router-dom';
 import { useDashboardData } from '../context/DashboardDataContext';
 import { useSelectedGuild } from '../context/SelectedGuildContext';
 import { useToast } from '../components/ToastProvider';
+import { DEFAULT_SETTINGS } from '../data';
 
 export default function useGuildSettings() {
   const { activeRecord, updateSection, resetSection, saveSection, revertGuildChanges } = useDashboardData();
@@ -10,8 +11,10 @@ export default function useGuildSettings() {
   const { showToast } = useToast();
   const location = useLocation();
 
-  const guild = activeRecord.settings.guild;
-  const lastSaved = activeRecord.lastSaved.guild;
+  // Gracefully handle scenarios where the active guild record hasn't hydrated yet
+  // so feature pages don't crash while data loads.
+  const guild = activeRecord?.settings?.guild ?? DEFAULT_SETTINGS.guild;
+  const lastSaved = activeRecord?.lastSaved?.guild ?? null;
 
   const updateGuild = (producer) => {
     const next = typeof producer === 'function' ? producer(guild) : producer;
