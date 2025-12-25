@@ -33,11 +33,16 @@ export default function GuildItemsPage() {
   useEffect(() => {
     const loadItems = async () => {
       if (!selectedGuild?.id) return;
+      const { data: sessionData } = await supabase.auth.getSession();
+      if (!sessionData?.session) {
+        console.warn('[items] Skipping item fetch; no session');
+        return;
+      }
       setLoadingItems(true);
       try {
         const { data, error } = await supabase
           .from('server_items')
-          .select('item_id, name, rarity, price')
+          .select('item_id, name, rarity')
           .eq('guild_id', selectedGuild.id);
         if (error) throw error;
         const items = Array.isArray(data)
@@ -45,7 +50,6 @@ export default function GuildItemsPage() {
               id: String(row.item_id),
               name: row.name ?? 'Untitled item',
               rarity: row.rarity ?? 'Common',
-              price: row.price ?? null,
               image: '',
               stock: 0,
             }))
@@ -102,10 +106,14 @@ export default function GuildItemsPage() {
 
   const persistItemUpdate = async (id, patch) => {
     if (!selectedGuild?.id || !id) return;
+    const { data: sessionData } = await supabase.auth.getSession();
+    if (!sessionData?.session) {
+      console.warn('[items] Skipping item update; no session');
+      return;
+    }
     const updatePayload = {};
     if (patch.name !== undefined) updatePayload.name = patch.name;
     if (patch.rarity !== undefined) updatePayload.rarity = patch.rarity;
-    if (patch.price !== undefined) updatePayload.price = patch.price;
 
     if (!Object.keys(updatePayload).length) return;
 
@@ -127,6 +135,11 @@ export default function GuildItemsPage() {
 
   const handleAddItem = async () => {
     if (!isCreating || !draftItem) return;
+    const { data: sessionData } = await supabase.auth.getSession();
+    if (!sessionData?.session) {
+      console.warn('[items] Skipping item insert; no session');
+      return;
+    }
     try {
       const { data, error } = await supabase
         .from('server_items')
@@ -134,16 +147,14 @@ export default function GuildItemsPage() {
           guild_id: selectedGuild?.id,
           name: draftItem.name,
           rarity: draftItem.rarity ?? 'Common',
-          price: draftItem.price ?? null,
         })
-        .select('item_id, name, rarity, price')
+        .select('item_id, name, rarity')
         .single();
       if (error) throw error;
       const persisted = {
         id: String(data.item_id),
         name: data.name ?? draftItem.name,
         rarity: data.rarity ?? draftItem.rarity ?? 'Common',
-        price: data.price ?? draftItem.price ?? null,
         image: draftItem.image ?? '',
         stock: draftItem.stock ?? 0,
       };
@@ -164,6 +175,11 @@ export default function GuildItemsPage() {
     }
     if (selectedItemId) {
       try {
+        const { data: sessionData } = await supabase.auth.getSession();
+        if (!sessionData?.session) {
+          console.warn('[items] Skipping item delete; no session');
+          return;
+        }
         await supabase.from('server_items').delete().eq('guild_id', selectedGuild?.id).eq('item_id', selectedItemId);
         removeItem(selectedItemId);
         setSelectedItemId(null);

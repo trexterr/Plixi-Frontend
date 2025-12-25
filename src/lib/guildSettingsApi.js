@@ -178,6 +178,12 @@ export async function fetchGuildSettingsFromSupabase(guildId) {
   const numericId = deriveGuildNumericId(guildId);
   if (!numericId) return null;
 
+  const { data: sessionData } = await supabase.auth.getSession();
+  if (!sessionData?.session) {
+    console.warn('[guildSettings] Skipping fetch; no authenticated session');
+    return null;
+  }
+
   const requests = await Promise.allSettled([
     supabase.from('currency_settings').select('*').eq('guild_id', numericId).maybeSingle(),
     supabase.from('box_settings').select('*').eq('guild_id', numericId).maybeSingle(),
@@ -237,6 +243,12 @@ const safeJobPool = (jobs) =>
 export async function persistGuildSettingsToSupabase(guildId, guildSettings) {
   const numericId = deriveGuildNumericId(guildId);
   if (!numericId || !guildSettings) return;
+
+  const { data: sessionData } = await supabase.auth.getSession();
+  if (!sessionData?.session) {
+    console.warn('[guildSettings] Skipping persist; no authenticated session');
+    return;
+  }
 
   const tasks = [
     {
